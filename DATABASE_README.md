@@ -65,10 +65,10 @@ Pony-Up v4 adds comprehensive database functionality to the Web3 gaming platform
    - Execute the script to create tables, indexes, and security policies
 
 3. **Configure Environment**
-   - The project is already configured with your credentials:
+   - Copy `.env.example` to `.env` and add your Supabase credentials:
    ```env
-   REACT_APP_SUPABASE_URL=https://gpajvkrjwrvojtfsyhcv.supabase.co
-   REACT_APP_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   REACT_APP_SUPABASE_URL=your_supabase_project_url_here
+   REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key_here
    ```
 
 ### 2. Local Development
