@@ -1,6 +1,8 @@
-import { createThirdwebClient } from "thirdweb";
-import { getContract } from "thirdweb";
+import { createThirdwebClient, getContract } from "thirdweb";
 import { sepolia } from "thirdweb/chains";
+
+// Note: Don't re-export Thirdweb functions here as it breaks dynamic imports
+// Import these functions directly from 'thirdweb' in components
 
 // Safe imports to prevent circular dependency issues
 let cachedContract: any = null;
@@ -21,13 +23,13 @@ export const getChain = async () => {
   return chain;
 };
 
-// Your deployed smart contract address
-export const CONTRACT_ADDRESS = "0xc5369041d5b6Df56a269F03B4b96377C17FBC56C";
+// Your deployed smart contract address - PU2 Contract
+export const CONTRACT_ADDRESS = "0x5dB94ea6159a8B90887637B82464BD04D9B2961b";
 
-// Contract ABI - matching the actual deployed contract (PokerGame-style)
+// Contract ABI - PU2 Contract with enhanced features
 export const CONTRACT_ABI = [
-  // View functions from actual deployed contract
-  "function getGameInfo(string code) view returns (address host, uint256 maxPlayers, uint256 buyIn, uint256 playerCount)",
+  // View functions - Updated getGameInfo returns isLocked and prizeSplits
+  "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits)",
   "function getPlayers(string code) view returns (address[] players)",
   "function getInGameJudges(string code) view returns (address[] judges)",
   "function getUnanimousJudges(string code) view returns (address[] judges)",
@@ -35,17 +37,23 @@ export const CONTRACT_ABI = [
   "function codeIsAvailable(string code) view returns (bool)",
   "function isWinnerConfirmed(string code, address winner) view returns (bool)",
   
-  // Write functions from actual deployed contract
+  // Write functions - Original + New PU2 functions
   "function startGame(uint256 buyIn, uint256 maxPlayers) returns (string code)",
   "function joinGame(string code) payable",
   "function setJudges(address[] judgeList)",
+  "function addJudge(string code, address judge)",
+  "function lockGame(string code)",
+  "function setPrizeSplits(string code, uint256[] splits)",
   "function reportWinners(string code, address[] winners)",
   "function approveWinner(string code, address winner)",
   "function claimWinnings(string code)",
   
-  // Events - needed for parsing transaction receipts
+  // Events - Original + New PU2 events
   "event GameStarted(string code, address indexed host, uint256 buyIn, uint256 maxPlayers)",
   "event PlayerJoined(string code, address indexed player)",
+  "event JudgeAdded(string code, address indexed judge)",
+  "event GameLocked(string code)",
+  "event PrizeSplitsSet(string code, uint256[] splits)",
   "event WinnersReported(string code, address indexed reporter, address[] winners)",
   "event WinnerApproved(string code, address indexed voter, address winner)",
   "event WinnerConfirmed(string code, address winner)",
@@ -61,6 +69,30 @@ export const formatAddress = (address: string) => {
 export const formatEth = (wei: string | bigint) => {
   const eth = Number(wei) / 1e18;
   return eth.toFixed(4);
+};
+
+// Helper functions for prize splits
+export const formatPrizeSplit = (split: number | bigint) => {
+  const splitNum = typeof split === 'bigint' ? Number(split) : split;
+  return (splitNum / 10).toFixed(1) + '%';
+};
+
+export const calculatePrizeAmount = (totalPot: bigint, split: number) => {
+  return (totalPot * BigInt(split)) / BigInt(1000);
+};
+
+export const validatePrizeSplits = (splits: number[]): string | null => {
+  if (splits.length === 0) return null;
+  if (splits.length > 3) return "Maximum 3 prize splits allowed";
+  
+  const sum = splits.reduce((acc, split) => acc + split, 0);
+  if (sum !== 1000) return "Prize splits must sum to 100%";
+  
+  for (const split of splits) {
+    if (split <= 0 || split >= 1000) return "Each prize split must be between 0.1% and 99.9%";
+  }
+  
+  return null;
 };
 
 // Helper function to decode ABI-encoded string from hex data

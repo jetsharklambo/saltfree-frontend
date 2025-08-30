@@ -4,8 +4,8 @@ import { prepareContractCall } from 'thirdweb';
 import { sendTransaction } from 'thirdweb';
 import { waitForReceipt } from 'thirdweb';
 import { readContract } from 'thirdweb';
-import { X, Users, Coins, Clock, Crown, Trophy, AlertCircle, Scale } from 'lucide-react';
-import { getGameContract, formatAddress, formatEth, decodeStringFromHex } from '../thirdweb';
+import { X, Users, Coins, Clock, Crown, Trophy, AlertCircle, Scale, Lock, Unlock } from 'lucide-react';
+import { getGameContract, formatAddress, formatEth, decodeStringFromHex, formatPrizeSplit } from '../thirdweb';
 import { logBuyInInfo, formatBuyInForDisplay } from '../utils/buyInUtils';
 import { getDisplayNameByAddressSync, preloadUsernames, preloadDisplayNames, getDisplayNamesByAddresses, getDisplayNameInfo } from '../utils/userUtils';
 import { useUser } from '../contexts/UserContext';
@@ -20,6 +20,7 @@ import {
 } from '../styles/glass';
 import styled from '@emotion/styled';
 import { GameData } from '../contexts/GameDataContext';
+import PrizeSplitsModal from './PrizeSplitsModal';
 
 interface GameDetailModalProps {
   game: GameData;
@@ -35,6 +36,8 @@ interface DetailedGameData extends GameData {
   players?: string[];
   judges?: string[];
   isWinnerConfirmed?: boolean;
+  isLocked?: boolean;
+  prizeSplits?: number[];
 }
 
 const ModalHeader = styled.div`
@@ -446,6 +449,33 @@ const GameStatusIndicator = styled.div<{ $hasWinners: boolean }>`
   `}
 `;
 
+const LockStatusIndicator = styled.div<{ $isLocked: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  margin: 0.5rem 0;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  background: ${({ $isLocked }) => 
+    $isLocked 
+      ? 'rgba(239, 68, 68, 0.15)' 
+      : 'rgba(34, 197, 94, 0.15)'
+  };
+  border: 1px solid ${({ $isLocked }) => 
+    $isLocked 
+      ? 'rgba(239, 68, 68, 0.3)' 
+      : 'rgba(34, 197, 94, 0.3)'
+  };
+  color: ${({ $isLocked }) => 
+    $isLocked 
+      ? '#ef4444' 
+      : '#22c55e'
+  };
+`;
+
 // WinningsClaimed event signature (keccak256 of "WinningsClaimed(string,address,uint256)")
 const WINNINGS_CLAIMED_SIGNATURE = '0x7175967b5ddee4d7986318165167133a8c193aa59b05f411ec131d4f124a3f3d';
 
@@ -532,10 +562,12 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [selectedJudges, setSelectedJudges] = useState<Set<string>>(new Set());
-  const [selectedWinners, setSelectedWinners] = useState<Set<string>>(new Set());
+  const [selectedWinners, setSelectedWinners] = useState<string[]>([]);
   const [displayNames, setDisplayNames] = useState<Map<string, string>>(new Map());
   const [winnerStatuses, setWinnerStatuses] = useState<Map<string, boolean>>(new Map());
   const [claimedStatuses, setClaimedStatuses] = useState<Set<string>>(new Set());
+  const [unanimousJudges, setUnanimousJudges] = useState<string[]>([]);
+  const [showPrizeSplitsModal, setShowPrizeSplitsModal] = useState(false);
   
   const contract = getGameContract();
 
@@ -601,10 +633,10 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       console.log(`🔍 Loading detailed data for game: ${game.code}`);
       
       // Load comprehensive game data with actual deployed contract method signatures
-      const [gameInfo, players, judges] = await Promise.allSettled([
+      const [gameInfo, players, judges, unanimousJudgesResult] = await Promise.allSettled([
         readContract({
           contract,
-          method: "function getGameInfo(string code) view returns (address host, uint256 maxPlayers, uint256 buyIn, uint256 playerCount)",
+          method: "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits)",
           params: [game.code]
         }),
         readContract({
@@ -616,6 +648,11 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
           contract,
           method: "function getInGameJudges(string code) view returns (address[] judges)",
           params: [game.code]
+        }),
+        readContract({
+          contract,
+          method: "function getUnanimousJudges(string code) view returns (address[] judges)",
+          params: [game.code]
         })
       ]);
 
@@ -625,13 +662,15 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       console.log(`📊 Contract call results for ${game.code}:`, {
         gameInfo: gameInfo.status,
         players: players.status,
-        judges: judges.status
+        judges: judges.status,
+        unanimousJudges: unanimousJudgesResult.status
       });
 
       if (gameInfo.status === 'fulfilled') {
-        const [host, buyIn, maxPlayers, playerCount] = gameInfo.value as [string, bigint, bigint, number];
+        const [host, buyIn, maxPlayers, playerCount, isLocked, prizeSplitsBigInt] = gameInfo.value as [string, bigint, bigint, number, boolean, bigint[]];
+        const prizeSplits = prizeSplitsBigInt.map(split => Number(split));
         
-        console.log(`🔍 GameDetailModal for ${game.code}: buyIn=${buyIn.toString()}, maxPlayers=${maxPlayers.toString()}`);
+        console.log(`🔍 GameDetailModal for ${game.code}: buyIn=${buyIn.toString()}, maxPlayers=${maxPlayers.toString()}, isLocked=${isLocked}, prizeSplits=${prizeSplits}`);
         
         // Log the contract data for debugging
         logBuyInInfo('GameDetailModal loadGameDetails', game.code, buyIn, 'direct contract return');
@@ -641,7 +680,9 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
           host: host,
           buyIn: buyIn.toString(),
           maxPlayers: Number(maxPlayers),
-          playerCount: playerCount
+          playerCount: playerCount,
+          isLocked: isLocked,
+          prizeSplits: prizeSplits
         };
       } else if (gameInfo.status === 'rejected') {
         console.error(`❌ Failed to load gameInfo for ${game.code}:`, gameInfo.reason);
@@ -659,6 +700,15 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         console.log(`✅ Loaded ${updatedGame.judges.length} judges for ${game.code}:`, updatedGame.judges);
       } else if (judges.status === 'rejected') {
         console.error(`❌ Failed to load judges for ${game.code}:`, judges.reason);
+      }
+
+      if (unanimousJudgesResult.status === 'fulfilled') {
+        const judges = unanimousJudgesResult.value as string[];
+        setUnanimousJudges(judges);
+        console.log(`✅ Loaded ${judges.length} unanimous judges for ${game.code}:`, judges);
+      } else if (unanimousJudgesResult.status === 'rejected') {
+        console.error(`❌ Failed to load unanimous judges for ${game.code}:`, unanimousJudgesResult.reason);
+        setUnanimousJudges([]);
       }
 
       // Check winner confirmation status for all players
@@ -979,13 +1029,17 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
 
   const handleToggleWinner = (playerAddress: string) => {
     setSelectedWinners(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(playerAddress)) {
-        newSet.delete(playerAddress);
+      if (prev.includes(playerAddress)) {
+        // Remove from winners list
+        return prev.filter(addr => addr !== playerAddress);
       } else {
-        newSet.add(playerAddress);
+        // Add to end of winners list (next rank) - limit to 3 winners max
+        if (prev.length >= 3) {
+          setError('Maximum 3 winners allowed');
+          return prev;
+        }
+        return [...prev, playerAddress];
       }
-      return newSet;
     });
   };
 
@@ -1027,14 +1081,61 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
     }
   };
 
-  const handleReportWinners = async () => {
-    if (!account || selectedWinners.size === 0) return;
+  const handleAddJudge = async (judgeAddress: string) => {
+    if (!account) return;
     
     try {
       setActionLoading(true);
       setError('');
 
-      const winners = Array.from(selectedWinners);
+      console.log('Adding judge to game:', judgeAddress);
+      
+      const transaction = prepareContractCall({
+        contract,
+        method: "function addJudge(string code, address judge)",
+        params: [game.code, judgeAddress],
+      });
+
+      const result = await sendTransaction({
+        transaction,
+        account,
+      });
+
+      await waitForReceipt({
+        client: contract.client,
+        chain: contract.chain,
+        transactionHash: result.transactionHash,
+      });
+
+      console.log('Successfully added judge!');
+      await loadGameDetails();
+      onRefresh();
+
+    } catch (err: any) {
+      console.error('Failed to add judge:', err);
+      setError('Failed to add judge. Judge must be trusted by all players and game must be unlocked.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReportWinners = async () => {
+    if (!account || selectedWinners.length === 0) return;
+    
+    // Check if game is locked first (required in PU2)
+    if (!detailedGame.isLocked) {
+      setError('Game must be locked before reporting winners. Lock the game first.');
+      return;
+    }
+    
+    try {
+      setActionLoading(true);
+      setError('');
+
+      // Winners are already in rank order from the selectedWinners array
+      const winners = selectedWinners;
+      
+      console.log('Reporting winners in rank order:', winners);
       
       const transaction = prepareContractCall({
         contract,
@@ -1054,12 +1155,13 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       });
 
       console.log('Successfully reported winners!');
-      setSelectedWinners(new Set());
+      setSelectedWinners([]);
       await loadGameDetails();
+      onRefresh();
 
     } catch (err: any) {
       console.error('Failed to report winners:', err);
-      setError('Failed to report winners. Make sure you selected valid players.');
+      setError('Failed to report winners. Make sure game is locked and you selected valid players.');
     } finally {
       setActionLoading(false);
     }
@@ -1101,12 +1203,49 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
     }
   };
 
+  const handleLockGame = async () => {
+    if (!account) return;
+    
+    try {
+      setActionLoading(true);
+      setError('');
+
+      const transaction = prepareContractCall({
+        contract,
+        method: "function lockGame(string code)",
+        params: [game.code],
+      });
+
+      const result = await sendTransaction({
+        transaction,
+        account,
+      });
+
+      await waitForReceipt({
+        client: contract.client,
+        chain: contract.chain,
+        transactionHash: result.transactionHash,
+      });
+
+      console.log('Successfully locked game!');
+      await loadGameDetails();
+      onRefresh();
+
+    } catch (err: any) {
+      console.error('Failed to lock game:', err);
+      setError('Failed to lock game. Only the host can lock games.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const isHost = account && detailedGame.host && account.address.toLowerCase() === detailedGame.host.toLowerCase();
   const isPlayer = account && detailedGame.players?.some(p => p.toLowerCase() === account.address.toLowerCase());
-  const canJoin = account && !isPlayer && (detailedGame.playerCount || 0) < (detailedGame.maxPlayers || 0);
+  const canJoin = account && !isPlayer && !detailedGame.isLocked && (detailedGame.playerCount || 0) < (detailedGame.maxPlayers || 0);
 
   return (
-    <GlassModal onClick={onClose}>
+    <>
+      <GlassModal onClick={onClose}>
       <GlassModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '80vh', overflow: 'auto' }}>
         <ModalHeader>
           <ModalTitle>{game.code}</ModalTitle>
@@ -1142,6 +1281,39 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
           </RoleDisplay>
         </GameStats>
 
+        {/* Judge Badge */}
+        {detailedGame.judges && detailedGame.judges.length > 0 && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            margin: '16px 0',
+            padding: '12px 16px',
+            background: 'rgba(156, 163, 175, 0.1)',
+            border: '1px solid rgba(156, 163, 175, 0.2)',
+            borderRadius: '12px',
+            fontSize: '0.875rem',
+            color: '#9ca3af'
+          }}>
+            <Scale size={16} />
+            <span>Judge Decides: </span>
+            <span style={{ 
+              color: '#ffffff', 
+              fontWeight: '600',
+              background: 'rgba(156, 163, 175, 0.2)',
+              padding: '2px 8px',
+              borderRadius: '6px'
+            }}>
+              {getDisplayNameByAddressSync(detailedGame.judges[0]) || formatAddress(detailedGame.judges[0])}
+            </span>
+            {detailedGame.judges.length > 1 && (
+              <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>
+                +{detailedGame.judges.length - 1} more
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Game Status Indicator */}
         <GameStatusIndicator $hasWinners={Array.from(winnerStatuses.values()).some(Boolean)}>
           {Array.from(winnerStatuses.values()).some(Boolean) ? (
@@ -1150,6 +1322,15 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
             <>🎮 ACTIVE GAME</>
           )}
         </GameStatusIndicator>
+
+        {/* Lock Status Indicator */}
+        <LockStatusIndicator $isLocked={detailedGame.isLocked || false}>
+          {detailedGame.isLocked ? (
+            <><Lock size={16} />Game Locked - No new players can join</>
+          ) : (
+            <><Unlock size={16} />Game Open - Players can join</>
+          )}
+        </LockStatusIndicator>
 
         {error && (
           <StatusMessage variant="error">
@@ -1188,6 +1369,21 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                     <span className="label">Host:</span>
                     <span className="value">
                       {getDisplayNameForAddress(detailedGame.host)}
+                    </span>
+                  </InfoItem>
+                )}
+                
+                {/* Prize Distribution Display */}
+                {detailedGame.prizeSplits && detailedGame.prizeSplits.length > 0 && (
+                  <InfoItem>
+                    <Trophy size={16} className="icon" />
+                    <span className="label">Prize Distribution:</span>
+                    <span className="value" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      {detailedGame.prizeSplits.map((split, index) => (
+                        <span key={index} style={{ fontSize: '0.875rem' }}>
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'} {index + 1}{index === 0 ? 'st' : index === 1 ? 'nd' : 'rd'} Place: {formatPrizeSplit(split)}
+                        </span>
+                      ))}
                     </span>
                   </InfoItem>
                 )}
@@ -1244,12 +1440,22 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                           
                           <ActionIcon
                             variant="winner"
-                            active={selectedWinners.has(player)}
+                            active={selectedWinners.includes(player)}
                             onClick={() => handleToggleWinner(player)}
                             disabled={actionLoading}
-                            title="Toggle Winner"
+                            title={selectedWinners.includes(player) 
+                              ? `Selected as #${selectedWinners.indexOf(player) + 1} winner`
+                              : "Select as winner"
+                            }
                           >
-                            <Trophy size={14} />
+                            {selectedWinners.includes(player) ? (
+                              <span style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                                {selectedWinners.indexOf(player) + 1 === 1 ? '🥇' : 
+                                 selectedWinners.indexOf(player) + 1 === 2 ? '🥈' : '🥉'}
+                              </span>
+                            ) : (
+                              <Trophy size={14} />
+                            )}
                           </ActionIcon>
                         </PlayerActions>
                       </PlayerCard>
@@ -1262,9 +1468,93 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
             {/* Actions */}
             <ActionSection>
               <h3><Crown size={20} />Actions</h3>
+              
+                {/* Lock Game Button (Host Only) */}
+                {isHost && !detailedGame.isLocked && (
+                  <GlassButton
+                    variant="secondary"
+                    onClick={handleLockGame}
+                    disabled={actionLoading}
+                    style={{ 
+                      width: '100%', 
+                      marginBottom: '1rem',
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      borderColor: 'rgba(239, 68, 68, 0.3)',
+                      color: '#ef4444'
+                    }}
+                  >
+                    {actionLoading ? <LoadingSpinner /> : (
+                      <>
+                        <Lock size={16} />
+                        Lock Game (Prevent new players from joining)
+                      </>
+                    )}
+                  </GlassButton>
+                )}
                 
+                {/* Set Prize Distribution Button (Host Only, unlocked games) */}
+                {isHost && !detailedGame.isLocked && (
+                  <GlassButton
+                    variant="secondary"
+                    onClick={() => setShowPrizeSplitsModal(true)}
+                    disabled={actionLoading}
+                    style={{ 
+                      width: '100%', 
+                      marginBottom: '1rem',
+                      background: 'rgba(120, 119, 198, 0.1)',
+                      borderColor: 'rgba(120, 119, 198, 0.3)',
+                      color: '#7877c6'
+                    }}
+                  >
+                    <Trophy size={16} />
+                    Set Prize Distribution
+                  </GlassButton>
+                )}
+                
+                {/* Add Judge Section (Players only, unlocked games) */}
+                {isPlayer && !isHost && !detailedGame.isLocked && unanimousJudges.length > 0 && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <StatusMessage variant="info">
+                      <strong>Add Trusted Judges:</strong> You can add judges from your trusted list.
+                    </StatusMessage>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                      {unanimousJudges
+                        .filter(judge => !detailedGame.judges?.includes(judge))
+                        .map(judge => (
+                          <GlassButton
+                            key={judge}
+                            onClick={() => handleAddJudge(judge)}
+                            disabled={actionLoading}
+                            style={{
+                              padding: '0.5rem 0.75rem',
+                              fontSize: '0.75rem',
+                              background: 'rgba(34, 197, 94, 0.1)',
+                              borderColor: 'rgba(34, 197, 94, 0.3)',
+                              color: '#22c55e'
+                            }}
+                          >
+                            + {getDisplayNameForAddress(judge)}
+                          </GlassButton>
+                        ))
+                      }
+                    </div>
+                  </div>
+                )}
+
                 <StatusMessage variant="info">
-                  Select players above using the <Scale size={14} style={{ display: 'inline' }} /> (judge) and <Trophy size={14} style={{ display: 'inline' }} /> (winner) icons, then use the buttons below to submit your selections.
+                  Select players above using the <Scale size={14} style={{ display: 'inline' }} /> (judge) and <Trophy size={14} style={{ display: 'inline' }} /> (winner) icons. Winners are ranked by selection order (🥇🥈🥉).
+                  {detailedGame.prizeSplits && detailedGame.prizeSplits.length > 0 && (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                      Prize splits: {detailedGame.prizeSplits.map((split, idx) => 
+                        `${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'} ${(split / 10).toFixed(1)}%`
+                      ).join(' • ')}
+                    </div>
+                  )}
+                  {!detailedGame.isLocked && (
+                    <div style={{ marginTop: '0.5rem', color: '#ef4444', fontSize: '0.875rem' }}>
+                      ⚠️ Game must be locked before reporting winners.
+                    </div>
+                  )}
                 </StatusMessage>
 
                 <FlexContainer gap="1rem">
@@ -1285,13 +1575,13 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                   <GlassButton
                     variant="primary"
                     onClick={handleReportWinners}
-                    disabled={actionLoading || selectedWinners.size === 0}
+                    disabled={actionLoading || selectedWinners.length === 0}
                     style={{ flex: 1 }}
                   >
                     {actionLoading ? <LoadingSpinner /> : (
                       <>
                         <Trophy size={16} />
-                        Report Winners ({selectedWinners.size})
+                        Report Winners ({selectedWinners.length})
                       </>
                     )}
                   </GlassButton>
@@ -1347,13 +1637,32 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
             {/* No actions available */}
             {!isHost && !isPlayer && !canJoin && (
               <StatusMessage variant="warning">
-                Game is full or you're not eligible to join.
+                {detailedGame.isLocked 
+                  ? "Game is locked - no new players can join." 
+                  : "Game is full or you're not eligible to join."
+                }
               </StatusMessage>
             )}
           </>
         )}
       </GlassModalContent>
-    </GlassModal>
+      </GlassModal>
+      
+      {/* Prize Splits Modal - Rendered outside GameDetailModal */}
+      {showPrizeSplitsModal && (
+        <PrizeSplitsModal
+          gameCode={detailedGame.code}
+          currentSplits={detailedGame.prizeSplits || []}
+          onClose={() => setShowPrizeSplitsModal(false)}
+          onSuccess={(splits) => {
+            setShowPrizeSplitsModal(false);
+            // Refresh game details to show updated splits
+            loadGameDetails();
+            onRefresh();
+          }}
+        />
+      )}
+    </>
   );
 };
 

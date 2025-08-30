@@ -45,6 +45,9 @@ export interface Database {
           created_at: string
           block_number: number | null
           transaction_hash: string | null
+          is_locked: boolean | null
+          prize_splits: Json | null
+          winner_rank: number | null
         }
         Insert: {
           id?: string
@@ -57,6 +60,9 @@ export interface Database {
           created_at?: string
           block_number?: number | null
           transaction_hash?: string | null
+          is_locked?: boolean | null
+          prize_splits?: Json | null
+          winner_rank?: number | null
         }
         Update: {
           id?: string
@@ -69,6 +75,9 @@ export interface Database {
           created_at?: string
           block_number?: number | null
           transaction_hash?: string | null
+          is_locked?: boolean | null
+          prize_splits?: Json | null
+          winner_rank?: number | null
         }
         Relationships: [
           {

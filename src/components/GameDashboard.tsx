@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveAccount } from "thirdweb/react";
 import { readContract } from 'thirdweb';
-import { Plus, Users, Clock, Lock, RefreshCw, Search } from 'lucide-react';
+import { Plus, Users, Clock, Lock, RefreshCw, Search, Trophy } from 'lucide-react';
 import { getGameContract, formatAddress, formatEth, decodeStringFromHex } from '../thirdweb';
 import { getDisplayNameByAddress, getDisplayNameByAddressSync, preloadUsernames, preloadDisplayNames } from '../utils/userUtils';
 import { ensCache } from '../utils/ensUtils';
@@ -25,6 +25,8 @@ import { UsernameModal } from './UsernameModal';
 import { GameListsModal } from './GameListsModal';
 import { GameHistoryModal } from './GameHistoryModal';
 import UserDropdown from './UserDropdown';
+import JudgesModal from './JudgesModal';
+import JoinDropdown from './JoinDropdown';
 import { ErrorBoundarySection } from './GracefulErrorBoundary';
 import WinnerBadge, { TrophyBadge, CrownBadge } from './WinnerBadge';
 import ClaimedWinningsBadge, { CrossedOutPot } from './ClaimedWinningsBadge';
@@ -53,6 +55,7 @@ interface GameInfo {
   isActive?: boolean;
   isLocked?: boolean;
   autoLockTime?: number;
+  prizeSplits?: number[];
 }
 
 const DashboardContainer = styled.div`
@@ -208,12 +211,19 @@ const GameStats = styled.div`
   color: rgba(255, 255, 255, 0.7);
 `;
 
-const GameBadge = styled.div<{ variant: 'host' | 'player' }>`
-  background: ${({ variant }) => 
-    variant === 'host' 
-      ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.9), rgba(118, 75, 162, 0.9))'
-      : 'linear-gradient(135deg, rgba(81, 207, 102, 0.9), rgba(64, 192, 87, 0.9))'
-  };
+const GameBadge = styled.div<{ variant: 'host' | 'player' | 'judge-eligible' }>`
+  background: ${({ variant }) => {
+    switch (variant) {
+      case 'host':
+        return 'linear-gradient(135deg, rgba(102, 126, 234, 0.9), rgba(118, 75, 162, 0.9))';
+      case 'player':
+        return 'linear-gradient(135deg, rgba(81, 207, 102, 0.9), rgba(64, 192, 87, 0.9))';
+      case 'judge-eligible':
+        return 'linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.9))';
+      default:
+        return 'linear-gradient(135deg, rgba(81, 207, 102, 0.9), rgba(64, 192, 87, 0.9))';
+    }
+  }};
   color: white;
   padding: 0.4rem 0.9rem;
   border-radius: 14px;
@@ -282,12 +292,30 @@ const GameDashboard: React.FC = () => {
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [showGameListsModal, setShowGameListsModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showJudgesModal, setShowJudgesModal] = useState(false);
+  const [joinAsJudge, setJoinAsJudge] = useState(false);
+  const [unanimousJudgesCache, setUnanimousJudgesCache] = useState<Map<string, string[]>>(new Map());
+  const [gameFilter, setGameFilter] = useState<'all' | 'locked' | 'unlocked'>('all');
 
-  // Debug: log games state changes
+  // Filter games based on lock status
+  const filteredGames = games.filter(game => {
+    if (gameFilter === 'locked') return game.isLocked;
+    if (gameFilter === 'unlocked') return !game.isLocked;
+    return true; // 'all'
+  });
+
+  // Debug: log games state changes and fetch judges for new games
   useEffect(() => {
     console.log(`🎮 GameDashboard games state updated:`, games);
     console.log(`🎮 Games count: ${games.length}`);
-  }, [games]);
+    
+    // Fetch unanimous judges for new games
+    games.forEach(game => {
+      if (game.code && !unanimousJudgesCache.has(game.code)) {
+        fetchUnanimousJudges(game.code);
+      }
+    });
+  }, [games, unanimousJudgesCache]);
 
   // Pre-load ENS name when user connects wallet
   useEffect(() => {
@@ -310,9 +338,41 @@ const GameDashboard: React.FC = () => {
     setSelectedGame(game);
   };
 
-  const handleJoinGame = (gameCode: string) => {
+  const handleJoinGame = (gameCode: string, joinAsJudge: boolean = false) => {
     setJoinGameCode(gameCode);
+    setJoinAsJudge(joinAsJudge);
     setShowJoinModal(true);
+  };
+
+  const handleManageJudges = () => {
+    setShowJudgesModal(true);
+  };
+
+  // Function to fetch unanimous judges for a game
+  const fetchUnanimousJudges = async (gameCode: string) => {
+    try {
+      const contract = getGameContract();
+      const judges = await readContract({
+        contract,
+        method: "function getUnanimousJudges(string code) view returns (address[] judges)",
+        params: [gameCode],
+      }) as string[];
+      
+      console.log(`🏛️ Unanimous judges for ${gameCode}:`, judges);
+      
+      // Update cache
+      setUnanimousJudgesCache(prev => new Map(prev.set(gameCode, judges || [])));
+      return judges || [];
+    } catch (error) {
+      console.warn(`Failed to fetch unanimous judges for ${gameCode}:`, error);
+      return [];
+    }
+  };
+
+  // Check if current user is eligible to be judge for a game
+  const isUserEligibleJudge = (gameCode: string, userAddress: string): boolean => {
+    const judges = unanimousJudgesCache.get(gameCode) || [];
+    return judges.some(judge => judge.toLowerCase() === userAddress.toLowerCase());
   };
 
   const handleGameCreated = async (gameData: { gameCode: string; buyIn: string; maxPlayers: number }) => {
@@ -434,6 +494,7 @@ const GameDashboard: React.FC = () => {
             onEditUsername={() => setShowUsernameModal(true)}
             onGameLists={() => setShowGameListsModal(true)}
             onGameHistory={() => setShowHistoryModal(true)}
+            onManageJudges={handleManageJudges}
             walletAddress={account.address}
           />
         </FlexContainer>
@@ -457,9 +518,46 @@ const GameDashboard: React.FC = () => {
       {/* Games Section */}
       <SectionHeader>
         <SectionTitle>My Games ({games.length})</SectionTitle>
-        <p style={{ fontSize: '0.95rem', color: 'rgba(255, 255, 255, 0.6)', margin: 0 }}>
+        <p style={{ fontSize: '0.95rem', color: 'rgba(255, 255, 255, 0.6)', margin: '0 0 1rem 0' }}>
           {loading ? 'Loading your games from blockchain...' : 'Games you\'ve created or joined (click "Load My Games" to refresh)'}
         </p>
+        
+        {/* Filter Controls */}
+        <FlexContainer justify="center" gap="0.5rem" style={{ marginBottom: '1rem' }}>
+          <GlassButton
+            variant={gameFilter === 'all' ? 'primary' : 'secondary'}
+            onClick={() => setGameFilter('all')}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              background: gameFilter === 'all' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)'
+            }}
+          >
+            All ({games.length})
+          </GlassButton>
+          <GlassButton
+            variant={gameFilter === 'unlocked' ? 'primary' : 'secondary'}
+            onClick={() => setGameFilter('unlocked')}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              background: gameFilter === 'unlocked' ? '#22c55e' : 'rgba(255, 255, 255, 0.05)'
+            }}
+          >
+            Open ({games.filter(g => !g.isLocked).length})
+          </GlassButton>
+          <GlassButton
+            variant={gameFilter === 'locked' ? 'primary' : 'secondary'}
+            onClick={() => setGameFilter('locked')}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              background: gameFilter === 'locked' ? '#ef4444' : 'rgba(255, 255, 255, 0.05)'
+            }}
+          >
+            Locked ({games.filter(g => g.isLocked).length})
+          </GlassButton>
+        </FlexContainer>
       </SectionHeader>
       
       {loading ? (
@@ -468,13 +566,13 @@ const GameDashboard: React.FC = () => {
           <p style={{ marginTop: '1rem', color: 'rgba(255, 255, 255, 0.8)' }}>Loading games...</p>
         </GlassCard>
       ) : (() => {
-        console.log(`🎮 RENDER: games.length = ${games.length}, games =`, games);
-        return games.length === 0;
+        console.log(`🎮 RENDER: filteredGames.length = ${filteredGames.length}, filteredGames =`, filteredGames);
+        return filteredGames.length === 0;
       })() ? (
         <EmptyState>
-          <div className="emoji">🔍</div>
-          <h3>No games loaded yet</h3>
-          <p>Start by searching for a game to join, or create your own game!</p>
+          <div className="emoji">{games.length === 0 ? '🔍' : '🎯'}</div>
+          <h3>{games.length === 0 ? 'No games loaded yet' : `No ${gameFilter === 'all' ? '' : gameFilter} games found`}</h3>
+          <p>{games.length === 0 ? 'Start by searching for a game to join, or create your own game!' : `You don't have any ${gameFilter === 'all' ? '' : gameFilter} games. Try a different filter or create a new game.`}</p>
           <FlexContainer justify="center" gap="1rem" style={{ marginTop: '1.5rem' }}>
             <GlassButton onClick={() => setShowFindModal(true)}>
               <Search size={16} />
@@ -489,7 +587,7 @@ const GameDashboard: React.FC = () => {
       ) : (
         <GamesGrid>
           <AnimatePresence>
-            {games.map((game, index) => (
+            {filteredGames.map((game, index) => (
               <ErrorBoundarySection key={`section-${game.code}`}>
                 <ModernGameCard 
                   key={game.code} 
@@ -500,6 +598,8 @@ const GameDashboard: React.FC = () => {
                   index={index}
                   account={account}
                   user={user}
+                  isUserEligibleJudge={isUserEligibleJudge}
+                  onEligibilityCheck={fetchUnanimousJudges}
                 />
               </ErrorBoundarySection>
             ))}
@@ -521,9 +621,11 @@ const GameDashboard: React.FC = () => {
             onClose={() => {
               setShowJoinModal(false);
               setJoinGameCode('');
+              setJoinAsJudge(false);
             }}
             onSuccess={handleGameJoined}
             initialGameCode={joinGameCode}
+            joinAsJudge={joinAsJudge}
           />
         )}
 
@@ -558,6 +660,12 @@ const GameDashboard: React.FC = () => {
             onClose={() => setShowHistoryModal(false)}
           />
         )}
+
+        {showJudgesModal && (
+          <JudgesModal
+            onClose={() => setShowJudgesModal(false)}
+          />
+        )}
       </AnimatePresence>
     </DashboardContainer>
   );
@@ -567,11 +675,13 @@ const ModernGameCard: React.FC<{
   game: any; // Using any for now to handle both GameInfo and GameData
   currentUser: string;
   onClick: () => void;
-  onJoinGame?: (gameCode: string) => void;
+  onJoinGame?: (gameCode: string, joinAsJudge?: boolean) => void;
   index: number;
   account?: any;
   user?: any;
-}> = ({ game, currentUser, onClick, onJoinGame, index, account, user }) => {
+  isUserEligibleJudge: (gameCode: string, userAddress: string) => boolean;
+  onEligibilityCheck: (gameCode: string) => void;
+}> = ({ game, currentUser, onClick, onJoinGame, index, account, user, isUserEligibleJudge, onEligibilityCheck }) => {
   // Defensive checks to prevent errors
   if (!game) {
     return null;
@@ -634,7 +744,7 @@ const ModernGameCard: React.FC<{
   const handleJoinClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onJoinGame) {
-      onJoinGame(gameCode);
+      onJoinGame(gameCode, false); // Default to joining as player
     }
   };
 
@@ -677,6 +787,12 @@ const ModernGameCard: React.FC<{
                 Locked
               </FlexContainer>
             )}
+            {game.prizeSplits && game.prizeSplits.length > 0 && (
+              <FlexContainer align="center" gap="0.25rem" style={{ color: '#7877c6', fontSize: '0.75rem' }} title={`Prize splits: ${game.prizeSplits.map((split, idx) => `${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}${(split / 10).toFixed(1)}%`).join(' ')}`}>
+                <Trophy size={14} />
+                Custom Prizes
+              </FlexContainer>
+            )}
           </GameStats>
         </div>
         
@@ -708,17 +824,20 @@ const ModernGameCard: React.FC<{
           {hasJoined && !isHost && !isUserWinner && (
             <GameBadge variant="player">JOINED</GameBadge>
           )}
+          {/* Judge eligibility badge */}
+          {!hasJoined && !isCompleted && isUserEligibleJudge(gameCode, currentUser) && (
+            <GameBadge variant="judge-eligible">⚖️ JUDGE ELIGIBLE</GameBadge>
+          )}
           
           {/* Join button - lowest priority */}
           {canJoin && !isCompleted && (
-            <GlassButton
-              size="sm"
-              onClick={handleJoinClick}
-              title={`Join game for ${formatEth(game.buyIn || '0')} ETH`}
-            >
-              <Users size={14} />
-              Join
-            </GlassButton>
+            <JoinDropdown
+              gameCode={gameCode}
+              buyIn={game.buyIn || '0'}
+              onJoin={(gameCode, joinAsJudge) => onJoinGame && onJoinGame(gameCode, joinAsJudge)}
+              isUserEligibleJudge={isUserEligibleJudge(gameCode, currentUser)}
+              onEligibilityCheck={() => onEligibilityCheck(gameCode)}
+            />
           )}
         </FlexContainer>
       </GameHeader>

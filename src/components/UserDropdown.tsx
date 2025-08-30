@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, List, TrendingUp, ChevronDown, Settings } from 'lucide-react';
+import { User, List, TrendingUp, ChevronDown, Settings, Shield } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { getDisplayNameInfo } from '../utils/userUtils';
 import {
@@ -14,6 +14,7 @@ interface UserDropdownProps {
   onEditUsername: () => void;
   onGameLists: () => void;
   onGameHistory: () => void;
+  onManageJudges: () => void;
   walletAddress: string;
 }
 
@@ -170,6 +171,7 @@ export const UserDropdown: React.FC<UserDropdownProps> = ({
   onEditUsername,
   onGameLists,
   onGameHistory,
+  onManageJudges,
   walletAddress
 }) => {
   const { user } = useUser();
@@ -320,6 +322,11 @@ export const UserDropdown: React.FC<UserDropdownProps> = ({
             <DropdownItem onClick={() => handleItemClick(onEditUsername)}>
               <User size={16} />
               {hasUsername ? 'Edit Username' : 'Set Username'}
+            </DropdownItem>
+
+            <DropdownItem onClick={() => handleItemClick(onManageJudges)}>
+              <Shield size={16} />
+              Manage Judges
             </DropdownItem>
 
             <DropdownItem onClick={() => handleItemClick(onGameLists)}>

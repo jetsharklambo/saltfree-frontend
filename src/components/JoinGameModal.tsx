@@ -3,7 +3,7 @@ import { useActiveAccount } from "thirdweb/react";
 import { prepareContractCall } from "thirdweb";
 import { sendTransaction } from "thirdweb";
 import { readContract } from "thirdweb";
-import { X, Users, Search } from 'lucide-react';
+import { X, Users, Search, Shield } from 'lucide-react';
 import { gameContract, formatEth, formatAddress } from '../thirdweb';
 import { logBuyInInfo, formatBuyInForDisplay, compareTransactionParams } from '../utils/buyInUtils';
 import { getDisplayNameByAddressSync } from '../utils/userUtils';
@@ -23,6 +23,7 @@ interface JoinGameModalProps {
   onClose: () => void;
   onSuccess: (gameData?: { gameCode: string; buyIn: string; maxPlayers: number }) => void;
   initialGameCode?: string; // Optional pre-filled game code
+  joinAsJudge?: boolean; // Whether to join as judge (free entry)
 }
 
 const ModalOverlay = styled(motion.div)`
@@ -149,7 +150,7 @@ const ErrorMessage = styled(motion.div)`
   font-size: 0.9rem;
 `;
 
-const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initialGameCode }) => {
+const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initialGameCode, joinAsJudge = false }) => {
   const account = useActiveAccount();
   const { user } = useUser();
   const [gameCode, setGameCode] = useState(initialGameCode || '');
@@ -235,8 +236,9 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
       setError('');
 
       // Log transaction details for debugging
-      const buyInWei = BigInt(gameInfo.buyIn);
-      logBuyInInfo('JoinGameModal transaction', gameInfo.gameCode, buyInWei, 'gameInfo');
+      // Use 0 buy-in if joining as judge, otherwise use game buy-in
+      const buyInWei = joinAsJudge ? BigInt(0) : BigInt(gameInfo.buyIn);
+      logBuyInInfo('JoinGameModal transaction', gameInfo.gameCode, buyInWei, joinAsJudge ? 'judge (free)' : 'gameInfo');
       
       // Enhanced debugging: log all transaction parameters
       console.log('🔧 Transaction Debug - Before Preparation:');
@@ -408,7 +410,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
         onClick={e => e.stopPropagation()}
       >
         <ModalHeader>
-          <ModalTitle>Join Game</ModalTitle>
+          <ModalTitle>{joinAsJudge ? 'Join as Judge' : 'Join Game'}</ModalTitle>
           <CloseButton onClick={onClose}>
             <X size={20} />
           </CloseButton>
@@ -479,7 +481,10 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
 
         {gameInfo && (
           <InfoNote>
-            <strong>Note:</strong> If you're set as a judge by other players, you'll automatically join as a judge with no buy-in required.
+            <strong>Note:</strong> {joinAsJudge 
+              ? 'You are joining as a judge with no buy-in required. You can help determine winners but cannot win yourself.'
+              : 'If you\'re set as a judge by other players, you\'ll automatically join as a judge with no buy-in required.'
+            }
           </InfoNote>
         )}
 
@@ -492,7 +497,12 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
           {joining ? (
             <>
               <LoadingSpinner />
-              Joining Game...
+              {joinAsJudge ? 'Joining as Judge...' : 'Joining Game...'}
+            </>
+          ) : joinAsJudge ? (
+            <>
+              <Shield size={20} />
+              Join as Judge (FREE)
             </>
           ) : (
             <>

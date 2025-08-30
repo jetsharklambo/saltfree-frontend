@@ -100,6 +100,7 @@ const TransactionStatus = styled.div`
   }
 `;
 
+
 const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess }) => {
   const account = useActiveAccount();
   const [formData, setFormData] = useState({
@@ -110,6 +111,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
   const [transactionState, setTransactionState] = useState<'idle' | 'submitting' | 'waiting' | 'extracting'>('idle');
   const [transactionHash, setTransactionHash] = useState<string>('');
   const [error, setError] = useState('');
+  const [createdGameCode, setCreatedGameCode] = useState<string>('');
 
   const contract = getGameContract();
 
@@ -354,7 +356,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
           buyIn: formData.buyIn, 
           maxPlayers: formData.maxPlayers,
           transactionHash: result.transactionHash,
-          blockNumber: receipt.blockNumber 
+          blockNumber: receipt.blockNumber
         });
         return;
       } catch (apiError: any) {
@@ -406,6 +408,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
       case 'submitting': return '🚀 Submitting transaction to blockchain...';
       case 'waiting': return '⏳ Transaction submitted! Waiting for confirmation...';
       case 'extracting': return '🎯 Transaction confirmed! Extracting game code...';
+      case 'settingPrizes': return '🏆 Setting prize distribution...';
       default: return '';
     }
   };
@@ -466,6 +469,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             </GlassSelect>
           </FormGroup>
 
+
           {error && (
             <InfoBox variant="error">
               {error}
@@ -496,6 +500,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             )}
           </GlassButton>
         </form>
+        
       </GlassModalContent>
     </GlassModal>
   );

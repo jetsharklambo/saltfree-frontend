@@ -142,6 +142,32 @@ export const userService = {
       return null;
     }
   },
+
+  async getUserByUsername(username: string): Promise<User | null> {
+    if (!username) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single();
+      
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No user found
+          return null;
+        }
+        console.error('Error fetching user by username:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in getUserByUsername:', error);
+      return null;
+    }
+  },
 };
 
 // Game history operations
@@ -181,11 +207,15 @@ export const gameHistoryService = {
     gameCode: string, 
     userId: string, 
     result: 'won' | 'lost', 
-    winnings?: string
+    winnings?: string,
+    winnerRank?: number
   ): Promise<GameHistory | null> {
     const updates: GameHistoryUpdate = { result };
     if (winnings !== undefined) {
       updates.winnings = winnings;
+    }
+    if (winnerRank !== undefined) {
+      updates.winner_rank = winnerRank;
     }
 
     const { data, error } = await supabase
@@ -202,6 +232,34 @@ export const gameHistoryService = {
     }
     
     return data;
+  },
+
+  async updateGameStatus(
+    gameCode: string, 
+    updates: { 
+      isLocked?: boolean; 
+      prizeSplits?: number[] 
+    }
+  ): Promise<void> {
+    const dbUpdates: GameHistoryUpdate = {};
+    
+    if (updates.isLocked !== undefined) {
+      dbUpdates.is_locked = updates.isLocked;
+    }
+    if (updates.prizeSplits !== undefined) {
+      dbUpdates.prize_splits = updates.prizeSplits as any;
+    }
+
+    if (Object.keys(dbUpdates).length === 0) return;
+
+    const { error } = await supabase
+      .from('game_history')
+      .update(dbUpdates)
+      .eq('game_code', gameCode);
+    
+    if (error) {
+      console.error('Error updating game status:', error);
+    }
   },
 
   async getUserStats(userId: string): Promise<{

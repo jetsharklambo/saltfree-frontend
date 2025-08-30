@@ -1,6 +1,6 @@
 {
-  "name": "pony-upv4",
-  "version": "0.1.0",
+  "name": "pony-up-pu2",
+  "version": "2.0.0",
   "private": true,
   "dependencies": {
     "@emotion/babel-plugin": "^11.11.0",

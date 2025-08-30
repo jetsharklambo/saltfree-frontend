@@ -1,10 +1,416 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { getGameContract, decodeStringFromHex } from '../thirdweb';
+import { getGameContract, decodeStringFromHex, CONTRACT_ADDRESS } from '../thirdweb';
 import { logBuyInInfo } from '../utils/buyInUtils';
 import { databaseService } from '../services/databaseService';
 import { useUser } from './UserContext';
 
-import { readContract } from 'thirdweb';
+import { readContract, getContractEvents, getRpcClient, eth_blockNumber, prepareEvent, eth_getLogs } from 'thirdweb';
+
+// Prepared events for efficient querying
+const gameStartedEvent = prepareEvent({
+  signature: "event GameStarted(string code, address indexed host, uint256 buyIn, uint256 maxPlayers)"
+});
+
+const playerJoinedEvent = prepareEvent({
+  signature: "event PlayerJoined(string code, address indexed player)"
+});
+
+const judgeAddedEvent = prepareEvent({
+  signature: "event JudgeAdded(string code, address indexed judge)"
+});
+
+const gameLockedEvent = prepareEvent({
+  signature: "event GameLocked(string code)"
+});
+
+const prizeSplitsSetEvent = prepareEvent({
+  signature: "event PrizeSplitsSet(string code, uint256[] splits)"
+});
+
+const winnersReportedEvent = prepareEvent({
+  signature: "event WinnersReported(string code, address indexed reporter, address[] winners)"
+});
+
+const winnerApprovedEvent = prepareEvent({
+  signature: "event WinnerApproved(string code, address indexed voter, address winner)"
+});
+
+const winnerConfirmedEvent = prepareEvent({
+  signature: "event WinnerConfirmed(string code, address winner)"
+});
+
+const winningsClaimedEvent = prepareEvent({
+  signature: "event WinningsClaimed(string code, address indexed winner, uint256 amount)"
+});
+
+// Constants for blockchain searching
+const BLOCKS_IN_6_DAYS = 43200; // Approximately 6 days worth of blocks (assuming ~12 second blocks)
+
+// All events array for comprehensive searching
+const allGameEvents = [
+  gameStartedEvent,
+  playerJoinedEvent,
+  judgeAddedEvent,
+  gameLockedEvent,
+  prizeSplitsSetEvent,
+  winnersReportedEvent,
+  winnerApprovedEvent,
+  winnerConfirmedEvent,
+  winningsClaimedEvent
+];
+
+// Direct RPC function using Thirdweb client with chunking (replaces getContractEvents)
+async function getEventsViaRPC({
+  contract,
+  fromBlock,
+  toBlock,
+  userAddress,
+}: {
+  contract: any;
+  fromBlock: number;
+  toBlock: number;
+  userAddress?: string;
+}): Promise<any[]> {
+  const totalBlocks = toBlock - fromBlock + 1;
+  
+  // Skip Thirdweb for large ranges to avoid 1000-block limit error
+  if (totalBlocks > 1000) {
+    console.log(`🚀 Large range detected (${totalBlocks} blocks), skipping Thirdweb and going directly to RPC`);
+    return await getEventsFromDirectRPC({
+      contractAddress: contract.address,
+      fromBlock,
+      toBlock,
+      userAddress,
+    });
+  }
+  
+  // For small ranges, try Thirdweb first
+  try {
+    const rpcClient = getRpcClient({ 
+      client: contract.client, 
+      chain: contract.chain 
+    });
+    
+    console.log(`🌐 Using Thirdweb RPC client for blocks ${fromBlock} to ${toBlock} (${totalBlocks} blocks)`);
+    
+    // Since we're only using Thirdweb for small ranges now, make single request
+    {
+      const filter: any = {
+        address: contract.address,
+        fromBlock: BigInt(fromBlock),
+        toBlock: BigInt(toBlock),
+      };
+      
+      // If userAddress provided, add topic filter for user involvement
+      if (userAddress) {
+        const userTopic = `0x000000000000000000000000${userAddress.slice(2).toLowerCase()}`;
+        filter.topics = [
+          null, // Any event signature
+          userTopic // User address in indexed parameters
+        ];
+      }
+      
+      const logs = await eth_getLogs(rpcClient, filter);
+      console.log(`📦 Thirdweb request returned ${logs.length} logs`);
+      return logs;
+    }
+    
+  } catch (error) {
+    console.error('❌ Thirdweb RPC failed, falling back to direct RPC:', error);
+    // Fallback to direct RPC calls
+    return await getEventsFromDirectRPC({
+      contractAddress: contract.address,
+      fromBlock,
+      toBlock,
+      userAddress,
+    });
+  }
+}
+
+// Direct RPC implementation (copied from pony-upv4) for bypassing Thirdweb limits
+async function getEventsFromDirectRPC({
+  contractAddress,
+  fromBlock,
+  toBlock,
+  userAddress,
+}: {
+  contractAddress: string;
+  fromBlock: number;
+  toBlock: number;
+  userAddress?: string;
+}): Promise<any[]> {
+  const rpcEndpoints = [
+    'https://ethereum-sepolia.publicnode.com',
+    'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
+    'https://rpc.sepolia.ethpandaops.io',
+    'https://eth-sepolia.g.alchemy.com/v2/demo'
+  ];
+  
+  const topics = [];
+  
+  // Build base parameters
+  const baseParams = {
+    address: contractAddress,
+    fromBlock: `0x${fromBlock.toString(16)}`,
+    toBlock: `0x${toBlock.toString(16)}`,
+  };
+  
+  // If userAddress provided, we need to search in multiple indexed positions
+  const searchQueries = [];
+  if (userAddress) {
+    const userTopic = `0x000000000000000000000000${userAddress.slice(2).toLowerCase()}`;
+    searchQueries.push(
+      { ...baseParams, topics: [null, userTopic] },           // User in 1st indexed position
+      { ...baseParams, topics: [null, null, userTopic] },     // User in 2nd indexed position  
+      { ...baseParams, topics: [null, null, null, userTopic] } // User in 3rd indexed position
+    );
+  } else {
+    searchQueries.push({ ...baseParams }); // All events
+  }
+  
+  for (let i = 0; i < rpcEndpoints.length; i++) {
+    const endpoint = rpcEndpoints[i];
+    try {
+      console.log(`🌐 Trying direct RPC endpoint ${i + 1}/${rpcEndpoints.length}: ${endpoint.split('/')[2]}`);
+      
+      let allLogs: any[] = [];
+      
+      // Execute all search queries for this endpoint
+      for (let queryIdx = 0; queryIdx < searchQueries.length; queryIdx++) {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'eth_getLogs',
+            params: [searchQueries[queryIdx]],
+            id: queryIdx + 1,
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(`RPC Error: ${data.error.message}`);
+        }
+        
+        const logs = data.result || [];
+        console.log(`📊 Query ${queryIdx + 1}/${searchQueries.length} found ${logs.length} events`);
+        allLogs.push(...logs);
+      }
+      
+      // Remove duplicates by block number + transaction index + log index
+      const uniqueLogs = allLogs.filter((log, index, self) => 
+        index === self.findIndex(l => 
+          l.blockNumber === log.blockNumber && 
+          l.transactionIndex === log.transactionIndex && 
+          l.logIndex === log.logIndex
+        )
+      );
+      
+      console.log(`✅ Successfully got ${uniqueLogs.length} unique events from ${endpoint.split('/')[2]}`);
+      return uniqueLogs;
+      
+    } catch (error) {
+      console.warn(`❌ Direct RPC endpoint ${endpoint.split('/')[2]} failed:`, error);
+      
+      // If this is the last endpoint, throw the error
+      if (i === rpcEndpoints.length - 1) {
+        console.error('🚨 All direct RPC endpoints failed:', error);
+        throw error;
+      }
+      
+      // Add delay before trying next endpoint
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  return [];
+}
+
+// Helper function to get event name from signature (copied from pony-upv4)
+function getEventName(signature?: string): string | null {
+  if (!signature) return null;
+  
+  const eventMap: Record<string, string> = {
+    '0x0518a6eadbf1c70185fe974736fa2022919eed726a4027cd4b9525f1d7feb03a': 'GameStarted',
+    '0x39295572f1ca17725c1e2c253d71bc653406c2f4ebe6e7eeb82fe3c3acb72751': 'PlayerJoined',
+    '0xc83727715d9b58d35c2b5aa93e8e9144b9f66c103994a03bbafa82b473c142b2': 'WinnersReported',
+    '0xa5a4c7c1e3d0b75b36b5b8b3f4c7d5c8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6': 'WinnerApproved',
+    '0xb6b5c8c2f4e1d86c47c6c9c4e3f8e6d9bac3d4e5f6a7b8c9d0e1f2a3b4c5d6e7': 'WinnerConfirmed',
+    '0xc7c6d9d3e5f2e97d58d7dae5f4e9f7eacbd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8': 'WinningsClaimed'
+  };
+  
+  return eventMap[signature.toLowerCase()] || null;
+}
+
+// Ultra-efficient wallet-based transaction finder (NEW APPROACH)
+async function findLastContractInteraction(
+  userAddress: string, 
+  contractAddress: string,
+  currentBlock: number
+): Promise<number | null> {
+  const rpcEndpoints = [
+    'https://ethereum-sepolia.publicnode.com',
+    'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
+    'https://rpc.sepolia.ethpandaops.io',
+    'https://eth-sepolia.g.alchemy.com/v2/demo'
+  ];
+
+  console.log(`💎 Scanning wallet ${userAddress} for last interaction with ${contractAddress}`);
+
+  // Strategy: Binary search through recent blocks to find last transaction to our contract
+  const SEARCH_RANGES = [10000, 50000, 100000]; // Progressive search ranges
+  
+  for (const range of SEARCH_RANGES) {
+    const fromBlock = Math.max(0, currentBlock - range);
+    const toBlock = currentBlock;
+    
+    console.log(`🔍 Checking wallet transactions in range ${fromBlock} to ${toBlock} (${range} blocks)`);
+    
+    for (const endpoint of rpcEndpoints) {
+      try {
+        console.log(`🌐 Trying endpoint ${endpoint.split('/')[2]} for wallet scan`);
+        
+        // Make 3 separate queries to search user in different indexed positions
+        const userTopic = `0x000000000000000000000000${userAddress.slice(2).toLowerCase()}`;
+        const searchQueries = [
+          { topics: [null, userTopic] },     // User in 1st indexed position
+          { topics: [null, null, userTopic] }, // User in 2nd indexed position
+          { topics: [null, null, null, userTopic] }, // User in 3rd indexed position
+        ];
+        
+        let allLogs: any[] = [];
+        
+        for (let i = 0; i < searchQueries.length; i++) {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'eth_getLogs',
+              params: [{
+                fromBlock: `0x${fromBlock.toString(16)}`,
+                toBlock: `0x${toBlock.toString(16)}`,
+                address: contractAddress,
+                ...searchQueries[i]
+              }],
+              id: 1 + i,
+            }),
+          });
+
+          if (!response.ok) continue;
+          
+          const data = await response.json();
+          if (data.error) continue;
+
+          const logs = data.result || [];
+          console.log(`📊 Query ${i+1}/3 found ${logs.length} events (user in position ${i+1})`);
+          allLogs.push(...logs);
+        }
+        
+        console.log(`📊 Found ${allLogs.length} total events in ${range}-block range`);
+        
+        if (allLogs.length > 0) {
+          // Find the most recent transaction
+          const sortedLogs = allLogs.sort((a: any, b: any) => {
+            return parseInt(b.blockNumber, 16) - parseInt(a.blockNumber, 16);
+          });
+          
+          const lastBlock = parseInt(sortedLogs[0].blockNumber, 16);
+          console.log(`🎯 Last wallet interaction found at block ${lastBlock} via ${endpoint.split('/')[2]}`);
+          return lastBlock;
+        }
+        
+        break; // Try next range
+        
+      } catch (error) {
+        console.warn(`❌ Wallet scan failed on ${endpoint.split('/')[2]}:`, error);
+        continue;
+      }
+    }
+  }
+  
+  console.log('📭 No wallet interactions found with contract');
+  return null;
+}
+
+// Smart function to find user's last interaction with contract (LEGACY - keeping for fallback)
+async function findLastUserTransaction(
+  contract: any,
+  userAddress: string,
+  currentBlock: number
+): Promise<number | null> {
+  const SEARCH_CHUNK = 5000; // Increased from 1000 to 5000 for faster discovery
+  const MAX_SEARCH_ITERATIONS = 20; // Increased to cover more history with larger chunks
+  
+  console.log(`🔍 Finding last interaction for ${userAddress} starting from block ${currentBlock}`);
+  
+  // Search backwards from current block in 5000-block chunks
+  for (let i = 0; i < MAX_SEARCH_ITERATIONS; i++) {
+    const toBlock = currentBlock - (i * SEARCH_CHUNK);
+    const fromBlock = Math.max(0, toBlock - SEARCH_CHUNK + 1);
+    
+    if (fromBlock >= toBlock || fromBlock < 0) break;
+    
+    console.log(`🔎 Searching chunk ${i + 1}: blocks ${fromBlock} to ${toBlock} (${SEARCH_CHUNK} blocks)`);
+    
+    try {
+      const logs = await getEventsViaRPC({
+        contract,
+        fromBlock,
+        toBlock,
+        userAddress
+      });
+      
+      if (logs.length > 0) {
+        // Found activity! Return the most recent block number
+        const mostRecentBlock = Math.max(...logs.map((log: any) => parseInt(log.blockNumber, 16)));
+        console.log(`✅ Found last user transaction at block ${mostRecentBlock}`);
+        return mostRecentBlock;
+      }
+      
+      console.log(`📭 No activity found in blocks ${fromBlock} to ${toBlock}`);
+      
+    } catch (error) {
+      console.error(`❌ Error searching blocks ${fromBlock} to ${toBlock}:`, error);
+      continue; // Try next chunk
+    }
+  }
+  
+  console.log(`📭 No recent activity found for ${userAddress} after ${MAX_SEARCH_ITERATIONS} chunks`);
+  return null;
+}
+
+// Helper function to check if user is involved in a Thirdweb event
+function checkIfUserInvolvedInEvent(event: any, userAddress: string): boolean {
+  if (!event.args) return false;
+  
+  const userAddressLower = userAddress.toLowerCase();
+  
+  // Check all event arguments for user address
+  for (const [key, value] of Object.entries(event.args)) {
+    if (typeof value === 'string' && value.toLowerCase() === userAddressLower) {
+      return true;
+    }
+  }
+  
+  // Check common indexed parameters that might contain user address
+  const commonUserFields = ['host', 'player', 'winner', 'user', 'from', 'to'];
+  for (const field of commonUserFields) {
+    if (event.args[field] && 
+        typeof event.args[field] === 'string' && 
+        event.args[field].toLowerCase() === userAddressLower) {
+      return true;
+    }
+  }
+  
+  return false;
+}
 
 // Safe Thirdweb function wrapper to prevent crashes
 const safeReadContract = async (options: any) => {
@@ -78,6 +484,9 @@ export interface GameData {
   playerCount?: number;
   players?: string[];
   userRole?: 'host' | 'player' | 'unknown';
+  // New PU2 fields
+  isLocked?: boolean;
+  prizeSplits?: number[];
   // Winner status fields
   isWinnerConfirmed?: boolean;
   winningsClaimed?: boolean;
@@ -129,64 +538,96 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.log('🔍 Finding games for wallet:', userAddress);
       
       const gameCodesSet = new Set<string>();
+      
+      console.log('🚀 Smart search strategy: Find last transaction, then search around it');
+      
+      // Get current block number first
       const currentBlock = await getCurrentBlock();
-      const BLOCKS_IN_3_DAYS = Math.floor((3 * 24 * 60 * 60) / 12); // ~21,600 blocks
-      const MAX_ITERATIONS = 5;
-      const TOTAL_DAYS_LIMIT = 30;
+      console.log(`📊 Current block: ${currentBlock}`);
       
-      console.log('📌 Progressive search strategy: 3-day chunks, max 5 iterations or 30 days');
-      
-      let searchEndBlock = currentBlock;
-      let iteration = 0;
-      let totalDaysSearched = 0;
-      
-      // Progressive search: Find most recent transaction, then search back in 3-day chunks
-      while (iteration < MAX_ITERATIONS && totalDaysSearched < TOTAL_DAYS_LIMIT && gameCodesSet.size < displayLimit) {
-        iteration++;
-        console.log(`\n🔄 Iteration ${iteration}/${MAX_ITERATIONS}: Searching back from block ${searchEndBlock}`);
+      try {
+        // NEW APPROACH: Use wallet-based search for ultra-efficiency  
+        const contract = await getGameContract();
+        const lastInteractionBlock = await findLastContractInteraction(userAddress, contract.address, currentBlock);
         
-        // Find user's most recent transaction with our contract before searchEndBlock
-        const mostRecentTransaction = await findMostRecentContractTransaction(userAddress, searchEndBlock);
-        
-        if (!mostRecentTransaction) {
-          console.log(`📭 No more transactions found before block ${searchEndBlock}`);
-          break;
+        if (!lastInteractionBlock) {
+          console.log('📭 No wallet interactions found with contract');
+          setGames([]);
+          return;
         }
         
-        console.log(`🎯 Found transaction at block ${mostRecentTransaction}, searching 3 days back...`);
+        console.log(`🎯 Last wallet interaction at block ${lastInteractionBlock}, searching focused range`);
         
-        // Search 3 days back from this transaction
-        const searchFromBlock = Math.max(0, mostRecentTransaction - BLOCKS_IN_3_DAYS);
-        const searchToBlock = mostRecentTransaction;
+        // Step 2: Focused search around the last interaction (much smaller range)
+        const searchRadius = 10000; // 20k total blocks (10k before + 10k after)  
+        const searchFromBlock = Math.max(0, lastInteractionBlock - searchRadius);
+        const searchToBlock = Math.min(lastInteractionBlock + searchRadius, currentBlock); // Cap at current block
         
-        console.log(`🔍 Searching blocks ${searchFromBlock} to ${searchToBlock} (3 days from transaction)`);
+        console.log(`🔍 Focused search: blocks ${searchFromBlock} to ${searchToBlock} (±${searchRadius}, ~20k total)`);
         
+        const userInvolvedEvents = await getEventsViaRPC({
+          contract,
+          fromBlock: searchFromBlock,
+          toBlock: searchToBlock,
+          userAddress: userAddress,
+        });
+        
+        console.log(`👤 Found ${userInvolvedEvents.length} events involving user in focused range`);
+        
+        // Sort events by block number (newest first)
+        const sortedEvents = userInvolvedEvents.sort((a: any, b: any) => {
+          const blockA = parseInt(a.blockNumber, 16);
+          const blockB = parseInt(b.blockNumber, 16);
+          return blockB - blockA;
+        });
+        
+        // Process events to extract game codes
+        sortedEvents.forEach((event: any) => {
+          if (gameCodesSet.size >= displayLimit) return; // Stop once we have enough
+          
+          let gameCode = null;
+          
+          // Try to extract game code from event data
+          if (event.data && event.data.length > 2) {
+            gameCode = decodeStringFromHex(event.data);
+          }
+          
+          if (gameCode && gameCode.length >= 3 && gameCode.length <= 10 && /^[A-Z0-9-]+$/i.test(gameCode)) {
+            const eventName = getEventName(event.topics?.[0]);
+            gameCodesSet.add(gameCode);
+            console.log(`✨ Added game from ${eventName || 'unknown'} event: ${gameCode}`);
+          }
+        });
+        
+      } catch (error) {
+        console.error('❌ Smart search failed:', error);
+        setGames([]);
+        return;
+      }
+      
+      const gameCodes = Array.from(gameCodesSet);
+      console.log(`🏁 Smart search completed: Found ${gameCodes.length} games: [${gameCodes.join(', ')}]`);
+      
+      if (gameCodes.length === 0) {
+        console.log('📭 No games found with progressive search strategy, trying fallback search...');
+        
+        // Fallback: Search last 6 days directly from current block
         try {
-          const contract = await getGameContract();
+          console.log('🔄 Fallback: Searching last 6 days from current block...');
+          const fallbackFromBlock = Math.max(0, currentBlock - BLOCKS_IN_6_DAYS);
+          const fallbackContract = await getGameContract();
           
-          // 1. Search for ALL contract events involving this user in this range
-          console.log('🔍 Searching for all contract events involving user...');
-          const allUserEvents = await getEventsFromRPC({
-            contractAddress: contract.address,
-            eventSignature: null, // Get ALL events
-            fromBlock: searchFromBlock,
-            toBlock: searchToBlock,
-            userAddress: userAddress, // Filter by user involvement
+          const fallbackEvents = await getEventsViaRPC({
+            contract: fallbackContract,
+            fromBlock: fallbackFromBlock,
+            toBlock: currentBlock,
+            userAddress: userAddress,
           });
           
-          console.log(`📦 Found ${allUserEvents.length} total events involving user`);
+          console.log(`📦 Fallback found ${fallbackEvents.length} events in last 6 days`);
           
-          // Sort events by block number (newest first) to prioritize recent games
-          const sortedEvents = allUserEvents.sort((a: any, b: any) => {
-            const blockA = parseInt(a.blockNumber, 16);
-            const blockB = parseInt(b.blockNumber, 16);
-            return blockB - blockA; // Newest first
-          });
-          
-          console.log(`📊 Sorted ${sortedEvents.length} events by block number (newest first)`);
-          
-          // Process sorted events to extract game codes (newest first)
-          sortedEvents.forEach((event: any, index: number) => {
+          const fallbackGameCodes = new Set<string>();
+          fallbackEvents.forEach((event: any) => {
             let gameCode = null;
             
             // Try to extract game code from event data
@@ -194,70 +635,27 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               gameCode = decodeStringFromHex(event.data);
             }
             
-            // If no game code in data, check if event topics contain user address
-            if (!gameCode && event.topics) {
-              const userTopic = `0x000000000000000000000000${userAddress.slice(2).toLowerCase()}`;
-              const hasUserInTopics = event.topics.some((topic: string) => 
-                topic.toLowerCase() === userTopic
-              );
-              
-              if (hasUserInTopics && event.data) {
-                // This event involves the user, try harder to extract game code
-                gameCode = decodeStringFromHex(event.data);
-              }
-            }
-            
             if (gameCode && gameCode.length >= 3 && gameCode.length <= 10 && /^[A-Z0-9-]+$/i.test(gameCode)) {
-              const eventName = getEventName(event.topics?.[0]);
-              gameCodesSet.add(gameCode);
-              console.log(`✨ Added game from ${eventName || 'unknown'} event: ${gameCode}`);
+              fallbackGameCodes.add(gameCode);
+              console.log(`✨ Fallback found game: ${gameCode}`);
             }
           });
           
-          // 2. If still need more games, get user's transaction receipts from this period
-          if (gameCodesSet.size < displayLimit) {
-            console.log('🔍 Getting user transaction receipts for additional game codes...');
-            const transactionGameCodes = await extractGameCodesFromUserTransactions(
-              userAddress, 
-              contract.address, 
-              searchFromBlock, 
-              searchToBlock
-            );
-            
-            transactionGameCodes.forEach(gameCode => {
-              gameCodesSet.add(gameCode);
-              console.log(`✨ Added game from transaction data: ${gameCode}`);
-            });
+          if (fallbackGameCodes.size > 0) {
+            const fallbackGames = Array.from(fallbackGameCodes).slice(0, displayLimit).map(gameCode => ({
+              code: gameCode,
+              userRole: 'unknown' as const
+            }));
+            console.log(`🎯 Fallback successful: Found ${fallbackGames.length} games`);
+            setGames(fallbackGames);
+            setLoading(false);
+            return;
           }
-          
         } catch (error) {
-          console.error(`❌ Failed to get events for iteration ${iteration}:`, error);
+          console.error('❌ Fallback search failed:', error);
         }
         
-        // Update counters
-        totalDaysSearched += 3;
-        searchEndBlock = searchFromBlock - 1; // Start next search where this one ended
-        
-        console.log(`📊 Progress: Found ${gameCodesSet.size} games, searched ${totalDaysSearched} days`);
-        
-        // Stop early if we have enough games
-        if (gameCodesSet.size >= displayLimit) {
-          console.log(`🎯 Found enough games (${gameCodesSet.size}), stopping search`);
-          break;
-        }
-        
-        // Add delay between iterations to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-      
-      console.log(`\n🏁 Search completed: Found ${gameCodesSet.size} unique games after ${iteration} iterations`);
-      
-      const gameCodes = Array.from(gameCodesSet);
-      console.log(`🎲 Final result: ${gameCodes.length} games found: [${gameCodes.join(', ')}]`);
-      console.log('📝 Note: Games are processed in newest-first order from sorted events');
-      
-      if (gameCodes.length === 0) {
-        console.log('📭 No games found with progressive search strategy');
+        console.log('📭 No games found even with fallback search');
         setGames([]);
         setLoading(false);
         return;
@@ -462,244 +860,16 @@ export const useGameData = () => {
   return context;
 };
 
-// Helper function to get event name from signature
-function getEventName(signature: string | undefined): string | null {
-  if (!signature) return null;
-  
-  const eventMap: { [key: string]: string } = {
-    '0x0518a6eadbf1c70185fe974736fa2022919eed726a4027cd4b9525f1d7feb03a': 'GameStarted',
-    '0x39295572f1ca17725c1e2c253d71bc653406c2f4ebe6e7eeb82fe3c3acb72751': 'PlayerJoined',
-    '0xc83727715d9b58d35c2b5aa93e8e9144b9f66c103994a03bbafa82b473c142b2': 'WinnersReported',
-    '0xa5a4c7c1e3d0b75b36b5b8b3f4c7d5c8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6': 'WinnerApproved',
-    '0xb6b5c8c2f4e1d86c47c6c9c4e3f8e6d9bac3d4e5f6a7b8c9d0e1f2a3b4c5d6e7': 'WinnerConfirmed',
-    '0xc7c6d9d3e5f2e97d58d7dae5f4e9f7eacbd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8': 'WinningsClaimed'
-  };
-  
-  return eventMap[signature.toLowerCase()] || null;
-}
 
-// Helper function to extract game codes from user transactions
-async function extractGameCodesFromUserTransactions(
-  userAddress: string,
-  contractAddress: string, 
-  fromBlock: number,
-  toBlock: number
-): Promise<string[]> {
-  const rpcEndpoints = [
-    'https://ethereum-sepolia.publicnode.com',
-    'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
-    'https://rpc.sepolia.ethpandaops.io',
-    'https://eth-sepolia.g.alchemy.com/v2/demo'
-  ];
-  
-  const gameCodesFound: string[] = [];
-  
-  // This is a placeholder for more advanced transaction analysis
-  // In a full implementation, we would:
-  // 1. Get all transactions from user to contract in this range
-  // 2. Decode transaction input data to extract game codes from function calls
-  // 3. Parse transaction receipts for additional game references
-  
-  console.log('📝 Advanced transaction analysis not yet implemented, using event-based approach');
-  return gameCodesFound;
-}
+// This function is no longer needed - using Thirdweb event handling instead
 
-// Helper function to get events from RPC directly with fallback providers
-async function getEventsFromRPC({
-  contractAddress,
-  eventSignature,
-  fromBlock,
-  toBlock,
-  userAddress,
-}: {
-  contractAddress: string;
-  eventSignature: string | null;
-  fromBlock: number;
-  toBlock: number;
-  userAddress?: string;
-}): Promise<any[]> {
-  const rpcEndpoints = [
-    'https://ethereum-sepolia.publicnode.com',
-    'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161', // Public Infura endpoint
-    'https://rpc.sepolia.ethpandaops.io',
-    'https://eth-sepolia.g.alchemy.com/v2/demo'
-  ];
-  
-  // Build topics array based on whether we want specific events or all events
-  const topics: (string | string[] | null)[] = [];
-  
-  if (eventSignature) {
-    // Specific event signature
-    topics.push(eventSignature);
-  } else {
-    // All events
-    topics.push(null);
-  }
-  
-  // If userAddress provided, add it as a filter (user could be in any topic position)
-  if (userAddress) {
-    const userTopic = `0x000000000000000000000000${userAddress.slice(2)}`;
-    topics.push(userTopic);
-  }
-  
-  const params = [{
-    address: contractAddress,
-    topics: topics.length > 0 ? topics : undefined,
-    fromBlock: `0x${fromBlock.toString(16)}`,
-    toBlock: `0x${toBlock.toString(16)}`,
-  }];
-  
-  for (let i = 0; i < rpcEndpoints.length; i++) {
-    const endpoint = rpcEndpoints[i];
-    try {
-      console.log(`🌐 Trying RPC endpoint ${i + 1}/${rpcEndpoints.length}: ${endpoint.split('/')[2]}`);
-      
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'eth_getLogs',
-          params,
-          id: 1,
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(`RPC Error: ${data.error.message}`);
-      }
-      
-      console.log(`✅ Successfully got ${data.result?.length || 0} events from ${endpoint.split('/')[2]}`);
-      return data.result || [];
-      
-    } catch (error) {
-      console.warn(`❌ RPC endpoint ${endpoint.split('/')[2]} failed:`, error);
-      
-      // If this is the last endpoint, throw the error
-      if (i === rpcEndpoints.length - 1) {
-        console.error('🚨 All RPC endpoints failed:', error);
-        throw error;
-      }
-      
-      // Add delay before trying next endpoint
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  }
-  
-  return [];
-}
+// This function is no longer needed - using Thirdweb getContractEvents instead
 
-// Helper function to find user's most recent transaction with contract before a given block
-async function findMostRecentContractTransaction(userAddress: string, beforeBlock: number): Promise<number | null> {
-  const rpcEndpoints = [
-    'https://ethereum-sepolia.publicnode.com',
-    'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
-    'https://rpc.sepolia.ethpandaops.io',
-    'https://eth-sepolia.g.alchemy.com/v2/demo'
-  ];
-  
-  const contractAddress = '0xc5369041d5b6Df56a269F03B4b96377C17FBC56C';
-  
-  // Search back in chunks to find most recent transaction
-  const SEARCH_CHUNK_SIZE = 5000; // Small chunks to avoid RPC limits
-  let searchToBlock = beforeBlock - 1;
-  let searchAttempts = 0;
-  const MAX_SEARCH_ATTEMPTS = 10;
-  
-  while (searchAttempts < MAX_SEARCH_ATTEMPTS) {
-    const searchFromBlock = Math.max(0, searchToBlock - SEARCH_CHUNK_SIZE);
-    searchAttempts++;
-    
-    console.log(`🔎 Attempt ${searchAttempts}: Searching blocks ${searchFromBlock} to ${searchToBlock} for recent transaction`);
-    
-    for (const endpoint of rpcEndpoints) {
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'eth_getLogs',
-            params: [{
-              fromBlock: `0x${searchFromBlock.toString(16)}`,
-              toBlock: `0x${searchToBlock.toString(16)}`,
-              address: contractAddress,
-              topics: [
-                null, // Any event
-                `0x000000000000000000000000${userAddress.slice(2)}` // User address as topic
-              ]
-            }],
-            id: 1,
-          }),
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        if (data.error) {
-          throw new Error(`RPC Error: ${data.error.message}`);
-        }
-        
-        const logs = data.result || [];
-        
-        if (logs.length > 0) {
-          // Find the most recent transaction (highest block number)
-          const mostRecentBlock = Math.max(...logs.map((log: any) => parseInt(log.blockNumber, 16)));
-          console.log(`✅ Found most recent transaction at block ${mostRecentBlock}`);
-          return mostRecentBlock;
-        }
-        
-        break; // Break endpoint loop if successful (even if no logs found)
-      } catch (error) {
-        console.warn(`❌ Failed to search ${endpoint.split('/')[2]}:`, error);
-        continue; // Try next endpoint
-      }
-    }
-    
-    // No transaction found in this chunk, search further back
-    searchToBlock = searchFromBlock - 1;
-    
-    if (searchFromBlock <= 0) {
-      console.log('🔚 Reached beginning of blockchain, no more transactions to search');
-      break;
-    }
-  }
-  
-  console.log('🔍 No recent transactions found with contract');
-  return null;
-}
+// Simplified progressive search - no longer need to find specific transactions
 
-// Helper function to get user's transaction history with the contract
-async function getUserContractTransactionBlocks(userAddress: string, currentBlock: number): Promise<number[]> {
-  const rpcEndpoints = [
-    'https://ethereum-sepolia.publicnode.com',
-    'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
-    'https://rpc.sepolia.ethpandaops.io',
-    'https://eth-sepolia.g.alchemy.com/v2/demo'
-  ];
-  
-  const contractAddress = '0xc5369041d5b6Df56a269F03B4b96377C17FBC56C';
-  // This function is now deprecated in favor of the progressive search approach
-  // Keeping for potential fallback use
-  const startBlock = Math.max(0, currentBlock - 50000); // Limit to 50k blocks to avoid RPC errors
-  
-  console.log(`🗓️ Fallback: Searching for transactions from block ${startBlock} to ${currentBlock}`);
-  
-  // This is now a fallback method - the main logic uses progressive search
-  // Return empty array to trigger the new progressive search approach
-  console.log('📝 Using progressive search instead of bulk transaction history');
-  return [];
-}
+// This function is no longer needed - using simplified progressive search
 
-// Helper function to get current block number with fallback providers
+// Helper function to get current block number using Thirdweb
 async function getCurrentBlock(): Promise<number> {
   const rpcEndpoints = [
     'https://ethereum-sepolia.publicnode.com',
@@ -742,6 +912,6 @@ async function getCurrentBlock(): Promise<number> {
     }
   }
   
-  console.error('🚨 All RPC endpoints failed to get current block number, using fallback');
-  return 1000000; // Fallback block number for Sepolia
+  console.error('🚨 All RPC endpoints failed for getCurrentBlock, using fallback');
+  return 9000000; // Conservative fallback block number for Sepolia
 }
