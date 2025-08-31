@@ -1,10 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { ThirdwebProvider, ConnectButton } from 'thirdweb/react';
 import { client, chain } from './thirdweb';
 import GameDashboard from './components/GameDashboard';
+import GameDetailPage from './pages/GameDetailPage';
+import MultiGamePage from './pages/MultiGamePage';
+import TestPage from './pages/TestPage';
 import { GameDataProvider } from './contexts/GameDataContext';
 import { UserProvider } from './contexts/UserContext';
-// Removed unused imports
+import { validateEnvironment } from './utils/envUtils';
 import styled from '@emotion/styled';
 import { Global, css } from '@emotion/react';
 
@@ -133,32 +138,58 @@ const MainContent = styled.main`
 `;
 
 function App() {
-  return (
-    <GracefulErrorBoundary onError={(error, errorInfo) => {
-        console.error('🚨 App-level error (non-blocking):', error, errorInfo);
-      }}>
-      <ThirdwebProvider client={client}>
-        <UserProvider>
-          <GameDataProvider>
-            <Global styles={globalStyles} />
-            <AppContainer>
-            <WalletBar>
-              <StyledConnectButton>
-                <ConnectButton 
-                  client={client}
-                  chain={chain}
-                />
-              </StyledConnectButton>
-            </WalletBar>
+  // Validate environment variables on app startup
+  useEffect(() => {
+    try {
+      validateEnvironment();
+    } catch (error) {
+      // Error is already logged in validateEnvironment()
+      // In production, this would prevent the app from starting
+    }
+  }, []);
 
-            <MainContent>
-              <GameDashboard />
-            </MainContent>
-          </AppContainer>
-          </GameDataProvider>
-        </UserProvider>
-      </ThirdwebProvider>
-    </GracefulErrorBoundary>
+  return (
+    <HelmetProvider>
+      <BrowserRouter>
+        <GracefulErrorBoundary onError={(error, errorInfo) => {
+            // Note: Replaced console.error with conditional logging for production
+            if (process.env.NODE_ENV === 'development') {
+              console.error('🚨 App-level error (non-blocking):', error, errorInfo);
+            }
+          }}>
+          <ThirdwebProvider client={client}>
+            <UserProvider>
+              <GameDataProvider>
+                <Global styles={globalStyles} />
+                <AppContainer>
+                <WalletBar>
+                  <StyledConnectButton>
+                    <ConnectButton 
+                      client={client}
+                      chain={chain}
+                    />
+                  </StyledConnectButton>
+                </WalletBar>
+
+                <MainContent>
+                  <Routes>
+                    <Route path="/" element={<GameDashboard />} />
+                    <Route path="/games/active" element={<GameDashboard filter="active" />} />
+                    <Route path="/games/mine" element={<GameDashboard filter="mine" />} />
+                    <Route path="/leaderboard" element={<GameDashboard view="leaderboard" />} />
+                    <Route path="/test" element={<TestPage />} />
+                    <Route path="/game/:gameCode" element={<GameDetailPage />} />
+                    <Route path="/game/*" element={<MultiGamePage />} />
+                    <Route path="/join/:gameCode" element={<GameDetailPage autoJoin={true} />} />
+                  </Routes>
+                </MainContent>
+              </AppContainer>
+              </GameDataProvider>
+            </UserProvider>
+          </ThirdwebProvider>
+        </GracefulErrorBoundary>
+      </BrowserRouter>
+    </HelmetProvider>
   );
 }
 

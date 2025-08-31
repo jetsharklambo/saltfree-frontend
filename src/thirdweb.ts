@@ -1,5 +1,6 @@
 import { createThirdwebClient, getContract } from "thirdweb";
 import { sepolia } from "thirdweb/chains";
+import { getRequiredEnvVar } from "./utils/envUtils";
 
 // Note: Don't re-export Thirdweb functions here as it breaks dynamic imports
 // Import these functions directly from 'thirdweb' in components
@@ -9,7 +10,7 @@ let cachedContract: any = null;
 
 // Synchronous exports for ThirdwebProvider (required for provider initialization)
 export const client = createThirdwebClient({
-  clientId: "fd75897568b8f195b5886be4710e306d"
+  clientId: getRequiredEnvVar('REACT_APP_THIRDWEB_CLIENT_ID')
 });
 
 export const chain = sepolia;
@@ -23,40 +24,39 @@ export const getChain = async () => {
   return chain;
 };
 
-// Your deployed smart contract address - PU2 Contract
-export const CONTRACT_ADDRESS = "0x5dB94ea6159a8B90887637B82464BD04D9B2961b";
+// Your deployed smart contract address - UP2.1 Contract
+export const CONTRACT_ADDRESS = "0x6B3f229A0c7FBC5987f13e97A57EC467625a09bB";
 
-// Contract ABI - PU2 Contract with enhanced features
+// Contract ABI - UP2.1 Contract with new judge system and enhanced features
 export const CONTRACT_ABI = [
-  // View functions - Updated getGameInfo returns isLocked and prizeSplits
-  "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits)",
+  // View functions - Updated for new contract
+  "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
   "function getPlayers(string code) view returns (address[] players)",
   "function getInGameJudges(string code) view returns (address[] judges)",
-  "function getUnanimousJudges(string code) view returns (address[] judges)",
-  "function judges(address player) view returns (address[] judges)",
+  "function getConfirmedWinners(string code) view returns (address[] winners)",
   "function codeIsAvailable(string code) view returns (bool)",
   "function isWinnerConfirmed(string code, address winner) view returns (bool)",
   
-  // Write functions - Original + New PU2 functions
-  "function startGame(uint256 buyIn, uint256 maxPlayers) returns (string code)",
+  // Write functions - Updated for new contract
+  "function startGame(uint256 buyIn, uint256 maxPlayers, address[] judgeList) returns (string code)",
   "function joinGame(string code) payable",
-  "function setJudges(address[] judgeList)",
-  "function addJudge(string code, address judge)",
   "function lockGame(string code)",
   "function setPrizeSplits(string code, uint256[] splits)",
   "function reportWinners(string code, address[] winners)",
-  "function approveWinner(string code, address winner)",
   "function claimWinnings(string code)",
+  "function addPot(string code) payable",
+  "function rmGame(string code, address participant)",
   
-  // Events - Original + New PU2 events
-  "event GameStarted(string code, address indexed host, uint256 buyIn, uint256 maxPlayers)",
+  // Events - Updated for new contract
+  "event GameStarted(string code, address indexed host, uint256 buyIn, uint256 maxPlayers, address[] judges)",
+  "event JudgeSet(string code, address indexed judge)",
   "event PlayerJoined(string code, address indexed player)",
-  "event JudgeAdded(string code, address indexed judge)",
+  "event PlayerRemoved(string code, address indexed participant)",
   "event GameLocked(string code)",
   "event PrizeSplitsSet(string code, uint256[] splits)",
+  "event PotAdded(string code, address indexed sender, uint256 amount)",
   "event WinnersReported(string code, address indexed reporter, address[] winners)",
-  "event WinnerApproved(string code, address indexed voter, address winner)",
-  "event WinnerConfirmed(string code, address winner)",
+  "event WinnerSetConfirmed(string code, address[] winners)",
   "event WinningsClaimed(string code, address indexed winner, uint256 amount)",
 ] as const;
 
@@ -133,7 +133,11 @@ export const decodeStringFromHex = (hexData: string): string | null => {
     
     return result;
   } catch (error) {
-    console.log('Error decoding string from hex:', error);
+    // Silently fail for invalid hex strings - this is expected behavior
+    // Only log in development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Error decoding string from hex:', error);
+    }
     return null;
   }
 };

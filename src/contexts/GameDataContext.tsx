@@ -3,20 +3,26 @@ import { getGameContract, decodeStringFromHex, CONTRACT_ADDRESS } from '../third
 import { logBuyInInfo } from '../utils/buyInUtils';
 import { databaseService } from '../services/databaseService';
 import { useUser } from './UserContext';
+import { logger, logGameAction, logContractCall, logPerformance } from '../utils/logger';
+import { validation } from '../utils/envUtils';
 
 import { readContract, getContractEvents, getRpcClient, eth_blockNumber, prepareEvent, eth_getLogs } from 'thirdweb';
 
-// Prepared events for efficient querying
+// Prepared events for efficient querying - Updated for UP2.1 contract
 const gameStartedEvent = prepareEvent({
-  signature: "event GameStarted(string code, address indexed host, uint256 buyIn, uint256 maxPlayers)"
+  signature: "event GameStarted(string code, address indexed host, uint256 buyIn, uint256 maxPlayers, address[] judges)"
+});
+
+const judgeSetEvent = prepareEvent({
+  signature: "event JudgeSet(string code, address indexed judge)"
 });
 
 const playerJoinedEvent = prepareEvent({
   signature: "event PlayerJoined(string code, address indexed player)"
 });
 
-const judgeAddedEvent = prepareEvent({
-  signature: "event JudgeAdded(string code, address indexed judge)"
+const playerRemovedEvent = prepareEvent({
+  signature: "event PlayerRemoved(string code, address indexed participant)"
 });
 
 const gameLockedEvent = prepareEvent({
@@ -27,16 +33,16 @@ const prizeSplitsSetEvent = prepareEvent({
   signature: "event PrizeSplitsSet(string code, uint256[] splits)"
 });
 
+const potAddedEvent = prepareEvent({
+  signature: "event PotAdded(string code, address indexed sender, uint256 amount)"
+});
+
 const winnersReportedEvent = prepareEvent({
   signature: "event WinnersReported(string code, address indexed reporter, address[] winners)"
 });
 
-const winnerApprovedEvent = prepareEvent({
-  signature: "event WinnerApproved(string code, address indexed voter, address winner)"
-});
-
-const winnerConfirmedEvent = prepareEvent({
-  signature: "event WinnerConfirmed(string code, address winner)"
+const winnerSetConfirmedEvent = prepareEvent({
+  signature: "event WinnerSetConfirmed(string code, address[] winners)"
 });
 
 const winningsClaimedEvent = prepareEvent({
@@ -46,16 +52,17 @@ const winningsClaimedEvent = prepareEvent({
 // Constants for blockchain searching
 const BLOCKS_IN_6_DAYS = 43200; // Approximately 6 days worth of blocks (assuming ~12 second blocks)
 
-// All events array for comprehensive searching
+// All events array for comprehensive searching - Updated for UP2.1 contract
 const allGameEvents = [
   gameStartedEvent,
+  judgeSetEvent,
   playerJoinedEvent,
-  judgeAddedEvent,
+  playerRemovedEvent,
   gameLockedEvent,
   prizeSplitsSetEvent,
+  potAddedEvent,
   winnersReportedEvent,
-  winnerApprovedEvent,
-  winnerConfirmedEvent,
+  winnerSetConfirmedEvent,
   winningsClaimedEvent
 ];
 
@@ -75,7 +82,12 @@ async function getEventsViaRPC({
   
   // Skip Thirdweb for large ranges to avoid 1000-block limit error
   if (totalBlocks > 1000) {
-    console.log(`🚀 Large range detected (${totalBlocks} blocks), skipping Thirdweb and going directly to RPC`);
+    logger.debug(`Large range detected (${totalBlocks} blocks), using direct RPC`, {
+      component: 'GameDataContext',
+      totalBlocks,
+      fromBlock,
+      toBlock
+    });
     return await getEventsFromDirectRPC({
       contractAddress: contract.address,
       fromBlock,
@@ -91,7 +103,12 @@ async function getEventsViaRPC({
       chain: contract.chain 
     });
     
-    console.log(`🌐 Using Thirdweb RPC client for blocks ${fromBlock} to ${toBlock} (${totalBlocks} blocks)`);
+    logger.debug(`Using Thirdweb RPC client`, {
+      component: 'GameDataContext',
+      fromBlock,
+      toBlock,
+      totalBlocks
+    });
     
     // Since we're only using Thirdweb for small ranges now, make single request
     {
@@ -111,12 +128,20 @@ async function getEventsViaRPC({
       }
       
       const logs = await eth_getLogs(rpcClient, filter);
-      console.log(`📦 Thirdweb request returned ${logs.length} logs`);
+      logger.debug(`Thirdweb request completed`, {
+        component: 'GameDataContext',
+        logsFound: logs.length
+      });
       return logs;
     }
     
   } catch (error) {
-    console.error('❌ Thirdweb RPC failed, falling back to direct RPC:', error);
+    logger.warn('Thirdweb RPC failed, falling back to direct RPC', {
+      component: 'GameDataContext',
+      error: error instanceof Error ? error.message : String(error),
+      fromBlock,
+      toBlock
+    });
     // Fallback to direct RPC calls
     return await getEventsFromDirectRPC({
       contractAddress: contract.address,
@@ -220,7 +245,12 @@ async function getEventsFromDirectRPC({
       
       // If this is the last endpoint, throw the error
       if (i === rpcEndpoints.length - 1) {
-        console.error('🚨 All direct RPC endpoints failed:', error);
+        logger.error('All direct RPC endpoints failed', error instanceof Error ? error : new Error(String(error)), {
+          component: 'GameDataContext',
+          contractAddress,
+          fromBlock,
+          toBlock
+        });
         throw error;
       }
       
@@ -697,12 +727,18 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addFoundGame = useCallback(async (gameCode: string, userAddress?: string) => {
     try {
-      console.log(`🔍 Searching for game: ${gameCode}`);
+      // Validate and sanitize inputs
+      const sanitizedGameCode = validation.sanitizeGameCode(gameCode);
+      const sanitizedUserAddress = userAddress ? validation.sanitizeAddress(userAddress) : undefined;
+      
+      logGameAction('Searching for game', sanitizedGameCode, {
+        userAddress: sanitizedUserAddress
+      });
       
       // Check if game already exists
-      const existingGame = games.find(g => g.code === gameCode);
+      const existingGame = games.find(g => g.code === sanitizedGameCode);
       if (existingGame) {
-        throw new Error(`Game ${gameCode} is already in your list`);
+        throw new Error(`Game ${sanitizedGameCode} is already in your list`);
       }
 
       // Fetch game info from actual deployed contract (returns [host, buyIn, maxPlayers, playerCount])
@@ -710,14 +746,19 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const [host, buyIn, maxPlayers, playerCount] = await safeReadContract({
         contract,
         method: "function getGameInfo(string code) view returns (address host, uint256 maxPlayers, uint256 buyIn, uint256 playerCount)",
-        params: [gameCode.trim()]
+        params: [sanitizedGameCode]
       }) as [string, bigint, bigint, number];
 
-      console.log(`🔍 GameDataContext for ${gameCode}: buyIn=${buyIn.toString()}, maxPlayers=${maxPlayers.toString()}`);
+      logger.debug(`Game info retrieved`, {
+        component: 'GameDataContext',
+        gameCode: sanitizedGameCode,
+        buyIn: buyIn.toString(),
+        maxPlayers: maxPlayers.toString()
+      });
       
       // Validate the returned data
       if (host === "0x0000000000000000000000000000000000000000") {
-        throw new Error(`Game ${gameCode} has invalid host address - game may not exist`);
+        throw new Error(`Game ${sanitizedGameCode} has invalid host address - game may not exist`);
       }
 
       // Also try to get players list
@@ -726,7 +767,7 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         players = await safeReadContract({
           contract,
           method: "function getPlayers(string code) view returns (address[] players)",
-          params: [gameCode.trim()]
+          params: [sanitizedGameCode]
         }) as string[];
       } catch (playerError) {
         console.log(`⚠️ Could not fetch players for ${gameCode}:`, playerError);

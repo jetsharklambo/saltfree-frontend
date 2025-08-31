@@ -94,7 +94,7 @@ npm run build
 Everything just works out of the box:
 - **Network:** Sepolia (we're not psychopaths... yet)
 - **Contract:** `0x5dB94ea6159a8B90887637B82464BD04D9B2961b` 
-- **Thirdweb:** `fd75897568b8f195b5886be4710e306d`
+- **Thirdweb:** `[Environment Variable: REACT_APP_THIRDWEB_CLIENT_ID]`
 
 Just connect your wallet and start losing money responsibly.
 

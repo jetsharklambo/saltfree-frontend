@@ -4,10 +4,12 @@ import { prepareContractCall } from 'thirdweb';
 import { sendTransaction } from 'thirdweb';
 import { waitForReceipt } from 'thirdweb';
 import { getContractEvents } from 'thirdweb';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Shield, Trash2 } from 'lucide-react';
 import { getGameContract, decodeStringFromHex, client, chain } from '../thirdweb';
+import { resolveToWalletAddress, formatResolvedAddress, ResolvedAddress } from '../utils/addressResolver';
 import { GlassModal, GlassModalContent, GlassButton, GlassInput, GlassSelect, FlexContainer, LoadingSpinner } from '../styles/glass';
 import styled from '@emotion/styled';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface CreateGameModalProps {
   onClose: () => void;
@@ -100,6 +102,96 @@ const TransactionStatus = styled.div`
   }
 `;
 
+const JudgesSection = styled.div`
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+`;
+
+const JudgesSectionTitle = styled.h3`
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  color: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const JudgeInputRow = styled.div`
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+`;
+
+const ResolvedAddressInfo = styled(motion.div)<{ $hasError?: boolean }>`
+  background: ${({ $hasError }) => 
+    $hasError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)'};
+  border: 1px solid ${({ $hasError }) => 
+    $hasError ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'};
+  border-radius: 12px;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  color: ${({ $hasError }) => 
+    $hasError ? '#ff6b6b' : '#4ade80'};
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: monospace;
+`;
+
+const JudgeItem = styled(motion.div)`
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+`;
+
+const JudgeInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+`;
+
+const JudgeDisplayName = styled.div`
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.95rem;
+`;
+
+const JudgeAddress = styled.div`
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: monospace;
+`;
+
+const RemoveJudgeButton = styled.button`
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 8px;
+  color: #ff6b6b;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.6);
+  }
+`;
+
 
 const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess }) => {
   const account = useActiveAccount();
@@ -112,8 +204,60 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
   const [transactionHash, setTransactionHash] = useState<string>('');
   const [error, setError] = useState('');
   const [createdGameCode, setCreatedGameCode] = useState<string>('');
+  
+  // Judges state
+  const [judgeInput, setJudgeInput] = useState('');
+  const [resolving, setResolving] = useState(false);
+  const [resolvedAddress, setResolvedAddress] = useState<ResolvedAddress | null>(null);
+  const [judges, setJudges] = useState<ResolvedAddress[]>([]);
 
   const contract = getGameContract();
+
+  // Handle judges input change with address resolution
+  const handleJudgeInputChange = async (value: string) => {
+    setJudgeInput(value);
+    setResolvedAddress(null);
+    
+    if (value.trim().length > 2) {
+      setResolving(true);
+      try {
+        const resolved = await resolveToWalletAddress(value.trim());
+        setResolvedAddress(resolved);
+      } catch (error) {
+        console.error('Judge resolution error:', error);
+      } finally {
+        setResolving(false);
+      }
+    }
+  };
+
+  // Add judge to the list
+  const handleAddJudge = () => {
+    if (!resolvedAddress || resolvedAddress.error || !resolvedAddress.address) return;
+
+    // Check if already exists
+    const existsInList = judges.some(judge => 
+      judge.address.toLowerCase() === resolvedAddress.address.toLowerCase()
+    );
+
+    if (existsInList) {
+      setError('This judge is already in your list');
+      return;
+    }
+
+    // Add to judges list
+    setJudges(prev => [...prev, resolvedAddress]);
+    setJudgeInput('');
+    setResolvedAddress(null);
+    setError('');
+  };
+
+  // Remove judge from the list
+  const handleRemoveJudge = (addressToRemove: string) => {
+    setJudges(prev => prev.filter(judge => 
+      judge.address.toLowerCase() !== addressToRemove.toLowerCase()
+    ));
+  };
 
   const validateInputs = () => {
     const buyInValue = parseFloat(formData.buyIn);
@@ -143,17 +287,20 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
       console.log('Creating game with:', {
         buyIn: formData.buyIn,
         maxPlayers: formData.maxPlayers,
+        judges: judges.map(j => j.address),
         account: account.address
       });
 
       const buyInWei = BigInt(Math.floor(parseFloat(formData.buyIn) * 1e18));
+      const judgeAddresses = judges.map(judge => judge.address);
       console.log('Buy-in in wei:', buyInWei.toString());
+      console.log('Judge addresses:', judgeAddresses);
 
       try {
         const transaction = prepareContractCall({
           contract,
-          method: "function startGame(uint256 buyIn, uint256 maxPlayers) returns (string code)",
-          params: [buyInWei, BigInt(formData.maxPlayers)],
+          method: "function startGame(uint256 buyIn, uint256 maxPlayers, address[] judgeList) returns (string code)",
+          params: [buyInWei, BigInt(formData.maxPlayers), judgeAddresses],
         });
 
         console.log('Creating game...');
@@ -469,6 +616,93 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             </GlassSelect>
           </FormGroup>
 
+          <JudgesSection>
+            <JudgesSectionTitle>
+              <Shield size={16} />
+              Judges (Optional)
+            </JudgesSectionTitle>
+            
+            <InfoBox variant="info" style={{ marginBottom: '1rem' }}>
+              Judges vote for free and can override player votes. Leave empty for player-only voting.
+            </InfoBox>
+            
+            <JudgeInputRow>
+              <GlassInput
+                placeholder="Enter username, ENS name, or wallet address"
+                value={judgeInput}
+                onChange={(e) => handleJudgeInputChange(e.target.value)}
+                style={{ flex: 1 }}
+                disabled={resolving}
+              />
+              <GlassButton
+                variant="secondary"
+                onClick={handleAddJudge}
+                disabled={!resolvedAddress || resolvedAddress.error || resolving}
+                type="button"
+              >
+                {resolving ? <LoadingSpinner size="sm" /> : <Plus size={16} />}
+                Add
+              </GlassButton>
+            </JudgeInputRow>
+
+            <AnimatePresence mode="wait">
+              {resolving && (
+                <ResolvedAddressInfo
+                  key="resolving"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <LoadingSpinner size="sm" />
+                  Resolving address...
+                </ResolvedAddressInfo>
+              )}
+
+              {resolvedAddress && !resolving && (
+                <ResolvedAddressInfo
+                  key="resolved"
+                  $hasError={!!resolvedAddress.error}
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  {resolvedAddress.error ? '⚠️' : '✅'}
+                  {formatResolvedAddress(resolvedAddress)}
+                </ResolvedAddressInfo>
+              )}
+            </AnimatePresence>
+            
+            {judges.length > 0 && (
+              <div style={{ marginTop: '1rem' }}>
+                <AnimatePresence>
+                  {judges.map((judge, index) => (
+                    <JudgeItem
+                      key={judge.address}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <JudgeInfo>
+                        <JudgeDisplayName>
+                          {judge.method === 'ens' && '🏷️ '}
+                          {judge.method === 'username' && '👤 '}
+                          {judge.method === 'wallet' && '📋 '}
+                          {judge.displayName}
+                        </JudgeDisplayName>
+                        <JudgeAddress>
+                          {judge.address}
+                        </JudgeAddress>
+                      </JudgeInfo>
+                      <RemoveJudgeButton onClick={() => handleRemoveJudge(judge.address)}>
+                        <Trash2 size={16} />
+                      </RemoveJudgeButton>
+                    </JudgeItem>
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+          </JudgesSection>
 
           {error && (
             <InfoBox variant="error">
@@ -495,7 +729,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             ) : (
               <FlexContainer align="center" justify="center" gap="0.5rem">
                 <Plus size={20} />
-                Create Game (Free Gas)
+                Create Game
               </FlexContainer>
             )}
           </GlassButton>

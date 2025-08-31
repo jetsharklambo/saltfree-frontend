@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveAccount } from "thirdweb/react";
+import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { readContract } from 'thirdweb';
-import { Plus, Users, Clock, Lock, RefreshCw, Search, Trophy } from 'lucide-react';
+import { Plus, Users, Clock, Lock, RefreshCw, Search, Trophy, Share2, Copy, Check } from 'lucide-react';
 import { getGameContract, formatAddress, formatEth, decodeStringFromHex } from '../thirdweb';
 import { getDisplayNameByAddress, getDisplayNameByAddressSync, preloadUsernames, preloadDisplayNames } from '../utils/userUtils';
 import { ensCache } from '../utils/ensUtils';
@@ -25,11 +27,17 @@ import { UsernameModal } from './UsernameModal';
 import { GameListsModal } from './GameListsModal';
 import { GameHistoryModal } from './GameHistoryModal';
 import UserDropdown from './UserDropdown';
-import JudgesModal from './JudgesModal';
 import JoinDropdown from './JoinDropdown';
 import { ErrorBoundarySection } from './GracefulErrorBoundary';
+import { validation } from '../utils/envUtils';
+import { logger, logGameAction } from '../utils/logger';
 import WinnerBadge, { TrophyBadge, CrownBadge } from './WinnerBadge';
 import ClaimedWinningsBadge, { CrossedOutPot } from './ClaimedWinningsBadge';
+
+interface GameDashboardProps {
+  filter?: 'active' | 'mine';
+  view?: 'leaderboard';
+}
 
 // Safe imports to prevent crashes
 const safeThirdwebFunctions = {
@@ -278,8 +286,12 @@ const EmptyState = styled.div`
   }
 `;
 
-const GameDashboard: React.FC = () => {
+const GameDashboard: React.FC<GameDashboardProps> = ({ 
+  filter, 
+  view
+}) => {
   const account = useActiveAccount();
+  const navigate = useNavigate();
   const { games, loading, error, fetchRecentGames, addFoundGame } = useGameData();
   const { user } = useUser();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -292,13 +304,26 @@ const GameDashboard: React.FC = () => {
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [showGameListsModal, setShowGameListsModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showJudgesModal, setShowJudgesModal] = useState(false);
   const [joinAsJudge, setJoinAsJudge] = useState(false);
+  const [isShareDashboardCopied, setIsShareDashboardCopied] = useState(false);
   const [unanimousJudgesCache, setUnanimousJudgesCache] = useState<Map<string, string[]>>(new Map());
   const [gameFilter, setGameFilter] = useState<'all' | 'locked' | 'unlocked'>('all');
 
   // Filter games based on lock status
   const filteredGames = games.filter(game => {
+    // Apply URL-based filter first
+    if (filter === 'active') {
+      // Active games are: not locked, not completed, and not full
+      return !game.isLocked && !game.isCompleted && game.playerCount < game.maxPlayers;
+    }
+    if (filter === 'mine' && account?.address) {
+      // User's games are where they are host or player
+      const userAddress = account.address.toLowerCase();
+      return game.host?.toLowerCase() === userAddress ||
+             game.players?.some(p => p?.toLowerCase() === userAddress);
+    }
+    
+    // Apply local gameFilter (from filter buttons)
     if (gameFilter === 'locked') return game.isLocked;
     if (gameFilter === 'unlocked') return !game.isLocked;
     return true; // 'all'
@@ -316,6 +341,8 @@ const GameDashboard: React.FC = () => {
       }
     });
   }, [games, unanimousJudgesCache]);
+
+  // URL parameters are now handled by dedicated GameDetailPage component
 
   // Pre-load ENS name when user connects wallet
   useEffect(() => {
@@ -344,9 +371,31 @@ const GameDashboard: React.FC = () => {
     setShowJoinModal(true);
   };
 
-  const handleManageJudges = () => {
-    setShowJudgesModal(true);
+  const handleShareDashboard = async () => {
+    // Get top 5 games from filtered games
+    const top5Games = filteredGames.slice(0, 5);
+    if (top5Games.length === 0) {
+      return; // No games to share
+    }
+    
+    const gameCodes = top5Games.map(game => game.code || game.gameCode).filter(code => code);
+    const shareUrl = `${window.location.origin}/game/${gameCodes.join('/')}/`;
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      
+      // Visual feedback for dashboard share
+      setIsShareDashboardCopied(true);
+      setTimeout(() => {
+        setIsShareDashboardCopied(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Failed to copy dashboard URL:', err);
+      // Fallback: show URL in an alert
+      alert(`Dashboard URL: ${shareUrl}`);
+    }
   };
+
 
   // Function to fetch unanimous judges for a game
   const fetchUnanimousJudges = async (gameCode: string) => {
@@ -415,28 +464,31 @@ const GameDashboard: React.FC = () => {
     );
   }
 
-  if (selectedGame) {
-    // Convert to GameData format if needed
-    const gameData = {
-      code: selectedGame.gameCode || (selectedGame as any).code,
-      host: selectedGame.host,
-      buyIn: selectedGame.buyIn,
-      maxPlayers: selectedGame.maxPlayers,
-      playerCount: selectedGame.playerCount,
-      userRole: 'unknown' as const
-    };
-    
-    return (
-      <GameDetailModal 
-        game={gameData} 
-        onClose={() => setSelectedGame(null)}
-        onRefresh={() => account && fetchRecentGames(account.address)}
-      />
-    );
-  }
+
+  // Create meta data for current dashboard view
+  const shareUrl = window.location.origin + window.location.pathname;
+  const shareTitle = filter === 'active' ? 'Active Games on Pony Up!' 
+    : filter === 'mine' ? 'My Games on Pony Up!'
+    : view === 'leaderboard' ? 'Pony Up! Leaderboard'
+    : 'Pony Up! - Blockchain Poker Games';
+  const shareDescription = 'Join poker games on the blockchain. Connect your wallet and start playing!';
 
   return (
-    <DashboardContainer>
+    <>
+      <Helmet>
+        <title>{shareTitle}</title>
+        <meta name="description" content={shareDescription} />
+        <meta property="og:title" content={shareTitle} />
+        <meta property="og:description" content={shareDescription} />
+        <meta property="og:url" content={shareUrl} />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content={`${window.location.origin}/pony-up-social.png`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={shareTitle} />
+        <meta name="twitter:description" content={shareDescription} />
+        <meta name="twitter:image" content={`${window.location.origin}/pony-up-social.png`} />
+      </Helmet>
+      <DashboardContainer>
       {/* Welcome Section */}
       <WelcomeSection>
         <SectionTitle>
@@ -453,7 +505,7 @@ const GameDashboard: React.FC = () => {
             </p>
           )}
         </FlexContainer>
-        <FlexContainer justify="center" gap="1rem" wrap={true} style={{ marginBottom: '1.5rem' }}>
+        <FlexContainer justify="center" gap="1rem" style={{ marginBottom: '1.5rem', flexWrap: 'wrap' }}>
           <GlassButton 
             onClick={() => setShowFindModal(true)}
             size="lg"
@@ -494,7 +546,6 @@ const GameDashboard: React.FC = () => {
             onEditUsername={() => setShowUsernameModal(true)}
             onGameLists={() => setShowGameListsModal(true)}
             onGameHistory={() => setShowHistoryModal(true)}
-            onManageJudges={handleManageJudges}
             walletAddress={account.address}
           />
         </FlexContainer>
@@ -556,6 +607,32 @@ const GameDashboard: React.FC = () => {
             }}
           >
             Locked ({games.filter(g => g.isLocked).length})
+          </GlassButton>
+          
+          {/* Share Games Button */}
+          <GlassButton
+            variant="secondary"
+            onClick={handleShareDashboard}
+            disabled={filteredGames.length === 0}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              background: isShareDashboardCopied ? glassTheme.success : 'rgba(255, 255, 255, 0.05)',
+              marginLeft: '1rem'
+            }}
+            title={`Share top ${Math.min(5, filteredGames.length)} games`}
+          >
+            {isShareDashboardCopied ? (
+              <>
+                <Check size={14} />
+                Link Copied!
+              </>
+            ) : (
+              <>
+                <Share2 size={14} />
+                Share Games
+              </>
+            )}
           </GlassButton>
         </FlexContainer>
       </SectionHeader>
@@ -661,13 +738,24 @@ const GameDashboard: React.FC = () => {
           />
         )}
 
-        {showJudgesModal && (
-          <JudgesModal
-            onClose={() => setShowJudgesModal(false)}
+
+        {selectedGame && (
+          <GameDetailModal 
+            game={{
+              code: selectedGame.gameCode || selectedGame.code,
+              host: selectedGame.host,
+              buyIn: selectedGame.buyIn,
+              maxPlayers: selectedGame.maxPlayers,
+              playerCount: selectedGame.playerCount,
+              userRole: 'unknown' as const
+            }} 
+            onClose={() => setSelectedGame(null)}
+            onRefresh={() => account && fetchRecentGames(account.address)}
           />
         )}
       </AnimatePresence>
     </DashboardContainer>
+    </>
   );
 };
 
@@ -682,6 +770,33 @@ const ModernGameCard: React.FC<{
   isUserEligibleJudge: (gameCode: string, userAddress: string) => boolean;
   onEligibilityCheck: (gameCode: string) => void;
 }> = ({ game, currentUser, onClick, onJoinGame, index, account, user, isUserEligibleJudge, onEligibilityCheck }) => {
+  const [isShareCopied, setIsShareCopied] = useState(false);
+  // Preload display names for host and players if not current user
+  React.useEffect(() => {
+    if (!game) return; // Early exit if no game
+    
+    const addressesToPreload: string[] = [];
+    
+    // Add host if not current user
+    if (game.host && game.host !== currentUser) {
+      addressesToPreload.push(game.host);
+    }
+    
+    // Add players if not current user
+    if (game.players && Array.isArray(game.players)) {
+      game.players.forEach((player: string) => {
+        if (player && player !== currentUser) {
+          addressesToPreload.push(player);
+        }
+      });
+    }
+    
+    // Preload if we have addresses
+    if (addressesToPreload.length > 0) {
+      preloadDisplayNames(addressesToPreload);
+    }
+  }, [game, currentUser]);
+
   // Defensive checks to prevent errors
   if (!game) {
     return null;
@@ -699,29 +814,6 @@ const ModernGameCard: React.FC<{
   const isUserWinner = game.isUserWinner || false;
   const winningsClaimed = game.winningsClaimed || game.hasUserClaimedWinnings || false;
   const isCompleted = game.isCompleted || winningsClaimed;
-
-  // Preload display names for host and players if not current user
-  React.useEffect(() => {
-    const addressesToPreload: string[] = [];
-    
-    // Add host if not current user
-    if (game.host && game.host !== currentUser) {
-      addressesToPreload.push(game.host);
-    }
-    
-    // Add players if available and not current user
-    if (game.players && Array.isArray(game.players)) {
-      game.players.forEach((player: string) => {
-        if (player && player !== currentUser && !addressesToPreload.includes(player)) {
-          addressesToPreload.push(player);
-        }
-      });
-    }
-    
-    if (addressesToPreload.length > 0) {
-      preloadDisplayNames(addressesToPreload);
-    }
-  }, [game.host, game.players, currentUser]);
 
   const handleCopyGameCode = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -748,6 +840,25 @@ const ModernGameCard: React.FC<{
     }
   };
 
+  const handleShareClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareUrl = `${window.location.origin}/game/${gameCode}`;
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      
+      // Visual feedback for share button
+      setIsShareCopied(true);
+      setTimeout(() => {
+        setIsShareCopied(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      // Fallback: show URL in an alert
+      alert(`Game URL: ${shareUrl}`);
+    }
+  };
+
   return (
     <GameCard
       onClick={onClick}
@@ -763,12 +874,40 @@ const ModernGameCard: React.FC<{
     >
       <GameHeader>
         <div>
-          <GameCodeTitle 
-            onClick={handleCopyGameCode}
-            title="Click to copy game code"
-          >
-            {gameCode}
-          </GameCodeTitle>
+          <FlexContainer align="center" gap="0.5rem">
+            <GameCodeTitle 
+              onClick={handleCopyGameCode}
+              title="Click to copy game code"
+            >
+              {gameCode}
+            </GameCodeTitle>
+            {isShareCopied ? (
+              <Check 
+                size={16} 
+                onClick={handleShareClick}
+                title="Link copied!"
+                style={{ 
+                  cursor: 'pointer', 
+                  color: glassTheme.success,
+                  transition: 'all 0.2s ease',
+                  transform: 'scale(1.1)'
+                }}
+              />
+            ) : (
+              <Share2 
+                size={16} 
+                onClick={handleShareClick}
+                title="Share game link"
+                style={{ 
+                  cursor: 'pointer', 
+                  color: 'rgba(255, 255, 255, 0.6)', 
+                  transition: 'color 0.2s ease',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 1)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)'}
+              />
+            )}
+          </FlexContainer>
           <GameStats>
             <FlexContainer align="center" gap="0.25rem">
               <Users size={16} />

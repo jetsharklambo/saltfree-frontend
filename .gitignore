@@ -61,3 +61,32 @@ lerna-debug.log*
 
 # Yarn Integrity file
 .yarn-integrity
+
+# Security & API Keys (PU2-rc1 Enhanced Protection)
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+.secrets
+.credentials
+config/production.json
+config/staging.json
+
+# Temporary files that might contain sensitive data
+*.tmp
+*.temp
+*.backup
+*.bak
+*.swp
+*.swo
+
+# Local development overrides
+.env.override
+.env.secrets
+docker-compose.override.yml
+
+# IDE and system files that might contain secrets
+.history/
+.vscode/settings.json
+.idea/workspace.xml

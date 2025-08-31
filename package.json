@@ -1,29 +1,40 @@
 {
-  "name": "pony-up-pu2",
-  "version": "2.0.0",
+  "name": "pony-up-pu2-rc1",
+  "version": "2.0.0-rc1",
   "private": true,
   "dependencies": {
     "@emotion/babel-plugin": "^11.11.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
+    "@supabase/supabase-js": "^2.38.5",
     "@types/node": "^16.18.68",
     "@types/react": "^18.2.42",
     "@types/react-dom": "^18.2.17",
+    "@types/react-helmet-async": "^1.0.1",
+    "@types/react-router-dom": "^5.3.3",
     "ajv": "^8.17.1",
     "framer-motion": "^10.16.16",
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-helmet-async": "^2.0.5",
+    "react-router-dom": "^6.30.1",
     "react-scripts": "5.0.1",
-    "thirdweb": "^5.0.0",
+    "thirdweb": "^5.105.39",
     "typescript": "^5.0.4",
-    "web-vitals": "^2.1.4",
-    "@supabase/supabase-js": "^2.38.5"
+    "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "craco start",
-    "build": "craco build",
+    "start": "GENERATE_SOURCEMAP=false craco start",
+    "build": "GENERATE_SOURCEMAP=false craco build",
+    "build:analyze": "npm run build && npx bundle-analyzer build/static/js/*.js",
     "test": "craco test",
+    "test:coverage": "craco test --coverage --watchAll=false",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint src --ext .js,.jsx,.ts,.tsx --fix",
+    "security:audit": "npm audit",
+    "security:check-deps": "npm list --depth=0",
+    "validate-env": "node scripts/validate-env.js",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -45,8 +56,9 @@
     ]
   },
   "devDependencies": {
+    "@craco/craco": "^7.1.0",
     "@types/jest": "^27.5.2",
-    "@craco/craco": "^7.1.0"
+    "dotenv": "^17.2.1"
   },
   "resolutions": {
     "@emotion/react": "^11.11.1",

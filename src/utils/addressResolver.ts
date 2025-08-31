@@ -4,7 +4,7 @@ import { client } from '../thirdweb';
 import { userService } from '../services/databaseService';
 import { ensCache } from './ensUtils';
 
-interface ResolvedAddress {
+export interface ResolvedAddress {
   address: string;
   displayName: string;
   method: 'wallet' | 'ens' | 'username';

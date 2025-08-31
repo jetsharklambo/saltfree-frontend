@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveAccount } from "thirdweb/react";
 import { prepareContractCall } from 'thirdweb';
 import { sendTransaction } from 'thirdweb';
 import { waitForReceipt } from 'thirdweb';
 import { readContract } from 'thirdweb';
-import { X, Users, Coins, Clock, Crown, Trophy, AlertCircle, Scale, Lock, Unlock } from 'lucide-react';
+import { X, Users, Coins, Clock, Crown, Trophy, AlertCircle, Scale, Lock, Unlock, Copy, Share2, ExternalLink, Check } from 'lucide-react';
 import { getGameContract, formatAddress, formatEth, decodeStringFromHex, formatPrizeSplit } from '../thirdweb';
 import { logBuyInInfo, formatBuyInForDisplay } from '../utils/buyInUtils';
 import { getDisplayNameByAddressSync, preloadUsernames, preloadDisplayNames, getDisplayNamesByAddresses, getDisplayNameInfo } from '../utils/userUtils';
@@ -54,6 +54,18 @@ const ModalTitle = styled.h2`
   margin: 0;
   font-family: 'Monaco', 'Menlo', monospace;
   letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  
+  &:hover {
+    color: ${glassTheme.accent};
+    transform: scale(1.02);
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
 `;
 
 const CloseButton = styled.button`
@@ -371,20 +383,26 @@ const StatusMessage = styled.div<{ variant: 'info' | 'success' | 'warning' | 'er
 `;
 
 
-// Winner badge component
+// Winner badge component with glass styling
 const WinnerBadge = () => (
   <span style={{
-    background: 'rgba(255, 193, 7, 0.2)',
-    color: '#ffc107',
-    padding: '2px 4px',
-    borderRadius: '4px',
+    background: 'rgba(255, 215, 0, 0.15)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 215, 0, 0.3)',
+    color: '#ffd700',
+    padding: '4px 8px',
+    borderRadius: '8px',
     fontSize: '0.8rem',
     marginLeft: '8px',
     display: 'inline-flex',
     alignItems: 'center',
-    fontWeight: 500
+    gap: '4px',
+    fontWeight: 600,
+    textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+    boxShadow: '0 2px 8px rgba(255, 215, 0, 0.1)'
   }}>
-    🏆
+    🏆 Winner
   </span>
 );
 
@@ -561,19 +579,59 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [selectedJudges, setSelectedJudges] = useState<Set<string>>(new Set());
   const [selectedWinners, setSelectedWinners] = useState<string[]>([]);
   const [displayNames, setDisplayNames] = useState<Map<string, string>>(new Map());
   const [winnerStatuses, setWinnerStatuses] = useState<Map<string, boolean>>(new Map());
   const [claimedStatuses, setClaimedStatuses] = useState<Set<string>>(new Set());
   const [unanimousJudges, setUnanimousJudges] = useState<string[]>([]);
   const [showPrizeSplitsModal, setShowPrizeSplitsModal] = useState(false);
+  const [isCodeCopied, setIsCodeCopied] = useState(false);
+  const [isShareCopied, setIsShareCopied] = useState(false);
   
   const contract = getGameContract();
+
+  // Load initial display names immediately when modal opens
+  useEffect(() => {
+    loadInitialDisplayNames(game);
+  }, [game.code]);
 
   useEffect(() => {
     loadGameDetails();
   }, [game.code]);
+
+  const loadInitialDisplayNames = async (gameData: GameData) => {
+    const allAddresses = new Set<string>();
+    
+    // Add host address
+    if (gameData.host) {
+      allAddresses.add(gameData.host);
+    }
+    
+    // Add player addresses
+    if (gameData.players) {
+      gameData.players.forEach(player => allAddresses.add(player));
+    }
+    
+    // Convert to array
+    const addressesToResolve = Array.from(allAddresses);
+    
+    if (addressesToResolve.length > 0) {
+      try {
+        console.log(`🔍 Loading initial display names for ${addressesToResolve.length} addresses`);
+        
+        // Pre-load display names (usernames + ENS) for faster sync access
+        await preloadDisplayNames(addressesToResolve);
+        
+        // Get display names with ENS resolution
+        const nameMap = await getDisplayNamesByAddresses(addressesToResolve);
+        
+        setDisplayNames(nameMap);
+        console.log(`✅ Loaded ${nameMap.size} initial display names:`, Object.fromEntries(nameMap));
+      } catch (error) {
+        console.warn('Failed to load initial display names:', error);
+      }
+    }
+  };
 
   const loadDisplayNames = async (gameData: DetailedGameData) => {
     const allAddresses = new Set<string>();
@@ -602,28 +660,30 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         const nameMap = await getDisplayNamesByAddresses(addressesToResolve);
         
         setDisplayNames(nameMap);
-        console.log(`✅ Loaded ${nameMap.size} display names`);
+        console.log(`✅ Loaded ${nameMap.size} display names:`, Object.fromEntries(nameMap));
       } catch (error) {
         console.warn('Failed to load display names:', error);
       }
     }
   };
 
-  const getDisplayNameForAddress = (address: string): string => {
-    // For current user, use the same sync function that handles proper priority (username → ENS → address)
-    if (account && address.toLowerCase() === account.address.toLowerCase()) {
+  const getDisplayNameForAddress = useMemo(() => {
+    return (address: string): string => {
+      // For current user, use the same sync function that handles proper priority (username → ENS → address)
+      if (account && address.toLowerCase() === account.address.toLowerCase()) {
+        return getDisplayNameByAddressSync(address);
+      }
+      
+      // Use loaded display names
+      const loadedName = displayNames.get(address);
+      if (loadedName) {
+        return loadedName;
+      }
+      
+      // Fallback to sync version (might have cached data)
       return getDisplayNameByAddressSync(address);
-    }
-    
-    // Use loaded display names
-    const loadedName = displayNames.get(address);
-    if (loadedName) {
-      return loadedName;
-    }
-    
-    // Fallback to sync version (might have cached data)
-    return getDisplayNameByAddressSync(address);
-  };
+    };
+  }, [displayNames, account]);
 
   const loadGameDetails = async () => {
     try {
@@ -1015,17 +1075,6 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
     }
   };
 
-  const handleToggleJudge = (playerAddress: string) => {
-    setSelectedJudges(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(playerAddress)) {
-        newSet.delete(playerAddress);
-      } else {
-        newSet.add(playerAddress);
-      }
-      return newSet;
-    });
-  };
 
   const handleToggleWinner = (playerAddress: string) => {
     setSelectedWinners(prev => {
@@ -1043,81 +1092,7 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
     });
   };
 
-  const handleSetJudges = async () => {
-    if (!account || selectedJudges.size === 0) return;
-    
-    try {
-      setActionLoading(true);
-      setError('');
 
-      const judges = Array.from(selectedJudges);
-      
-      const transaction = prepareContractCall({
-        contract,
-        method: "function setJudges(address[] judgeList)",
-        params: [judges],
-      });
-
-      const result = await sendTransaction({
-        transaction,
-        account,
-      });
-
-      await waitForReceipt({
-        client: contract.client,
-        chain: contract.chain,
-        transactionHash: result.transactionHash,
-      });
-
-      console.log('Successfully set judges!');
-      setSelectedJudges(new Set());
-      await loadGameDetails();
-
-    } catch (err: any) {
-      console.error('Failed to set judges:', err);
-      setError('Failed to set judges. Make sure you selected valid players.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleAddJudge = async (judgeAddress: string) => {
-    if (!account) return;
-    
-    try {
-      setActionLoading(true);
-      setError('');
-
-      console.log('Adding judge to game:', judgeAddress);
-      
-      const transaction = prepareContractCall({
-        contract,
-        method: "function addJudge(string code, address judge)",
-        params: [game.code, judgeAddress],
-      });
-
-      const result = await sendTransaction({
-        transaction,
-        account,
-      });
-
-      await waitForReceipt({
-        client: contract.client,
-        chain: contract.chain,
-        transactionHash: result.transactionHash,
-      });
-
-      console.log('Successfully added judge!');
-      await loadGameDetails();
-      onRefresh();
-
-    } catch (err: any) {
-      console.error('Failed to add judge:', err);
-      setError('Failed to add judge. Judge must be trusted by all players and game must be unlocked.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   const handleReportWinners = async () => {
     if (!account || selectedWinners.length === 0) return;
@@ -1239,19 +1214,104 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
     }
   };
 
+  // Copy and share handlers
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(game.code);
+      setIsCodeCopied(true);
+      setTimeout(() => {
+        setIsCodeCopied(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Failed to copy game code:', err);
+    }
+  };
+
+  const handleShareGame = async () => {
+    const shareUrl = `${window.location.origin}/game/${game.code}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setIsShareCopied(true);
+      setTimeout(() => {
+        setIsShareCopied(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Failed to copy game URL:', err);
+      alert(`Game URL: ${shareUrl}`);
+    }
+  };
+
+  const handleOpenNewTab = () => {
+    window.open(`/game/${game.code}`, '_blank');
+  };
+
   const isHost = account && detailedGame.host && account.address.toLowerCase() === detailedGame.host.toLowerCase();
   const isPlayer = account && detailedGame.players?.some(p => p.toLowerCase() === account.address.toLowerCase());
+  const isJudge = account && detailedGame.judges?.some(j => j.toLowerCase() === account.address.toLowerCase());
+  const hasJudges = detailedGame.judges && detailedGame.judges.length > 0;
   const canJoin = account && !isPlayer && !detailedGame.isLocked && (detailedGame.playerCount || 0) < (detailedGame.maxPlayers || 0);
+  
+  // Can vote if: game is locked but not completed, and user is eligible to vote
+  const canVote = detailedGame.isLocked && !detailedGame.isCompleted && account && (
+    hasJudges ? isJudge : isPlayer // Judge-decided: only judges can vote, Player-decided: players can vote
+  );
 
   return (
     <>
       <GlassModal onClick={onClose}>
       <GlassModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '80vh', overflow: 'auto' }}>
         <ModalHeader>
-          <ModalTitle>{game.code}</ModalTitle>
-          <CloseButton onClick={onClose}>
-            <X size={20} />
-          </CloseButton>
+          <ModalTitle 
+            onClick={handleCopyCode}
+            title={isCodeCopied ? "Code copied!" : "Click to copy game code"}
+            style={{
+              color: isCodeCopied ? glassTheme.success : undefined
+            }}
+          >
+            {isCodeCopied ? (
+              <>
+                <Check size={20} style={{ display: 'inline', marginRight: '0.5rem' }} />
+                {game.code}
+              </>
+            ) : (
+              game.code
+            )}
+          </ModalTitle>
+          <FlexContainer align="center" gap="0.5rem">
+            {/* Share URL Icon */}
+            <GlassButton
+              variant="secondary"
+              onClick={handleShareGame}
+              style={{
+                padding: '0.75rem',
+                fontSize: '0.875rem',
+                background: isShareCopied ? glassTheme.success : 'rgba(255, 255, 255, 0.1)',
+                minWidth: 'auto'
+              }}
+              title="Copy game page URL"
+            >
+              {isShareCopied ? <Check size={16} /> : <Share2 size={16} />}
+            </GlassButton>
+
+            {/* Open New Tab Icon */}
+            <GlassButton
+              variant="secondary"
+              onClick={handleOpenNewTab}
+              style={{
+                padding: '0.75rem',
+                fontSize: '0.875rem',
+                background: 'rgba(255, 255, 255, 0.1)',
+                minWidth: 'auto'
+              }}
+              title="Open game page in new tab"
+            >
+              <ExternalLink size={16} />
+            </GlassButton>
+
+            <CloseButton onClick={onClose}>
+              <X size={20} />
+            </CloseButton>
+          </FlexContainer>
         </ModalHeader>
 
         {/* Prominent Game Stats at Top */}
@@ -1410,7 +1470,7 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                     
                     return (
                       <PlayerCard 
-                        key={player}
+                        key={`${player}-${displayNames.size}`}
                         isWinner={isWinner}
                         hasClaimed={hasClaimed}
                       >
@@ -1426,38 +1486,30 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                           )}
                         </PlayerInfo>
                         
-                        {/* Action Icons */}
-                        <PlayerActions>
-                          <ActionIcon
-                            variant="judge"
-                            active={selectedJudges.has(player)}
-                            onClick={() => handleToggleJudge(player)}
-                            disabled={actionLoading}
-                            title="Toggle Judge"
-                          >
-                            <Scale size={14} />
-                          </ActionIcon>
-                          
-                          <ActionIcon
-                            variant="winner"
-                            active={selectedWinners.includes(player)}
-                            onClick={() => handleToggleWinner(player)}
-                            disabled={actionLoading}
-                            title={selectedWinners.includes(player) 
-                              ? `Selected as #${selectedWinners.indexOf(player) + 1} winner`
-                              : "Select as winner"
-                            }
-                          >
-                            {selectedWinners.includes(player) ? (
-                              <span style={{ fontSize: '12px', fontWeight: 'bold' }}>
-                                {selectedWinners.indexOf(player) + 1 === 1 ? '🥇' : 
-                                 selectedWinners.indexOf(player) + 1 === 2 ? '🥈' : '🥉'}
-                              </span>
-                            ) : (
-                              <Trophy size={14} />
-                            )}
-                          </ActionIcon>
-                        </PlayerActions>
+                        {/* Action Icons - Only show for eligible voters */}
+                        {canVote && (
+                          <PlayerActions>
+                            <ActionIcon
+                              variant="winner"
+                              active={selectedWinners.includes(player)}
+                              onClick={() => handleToggleWinner(player)}
+                              disabled={actionLoading}
+                              title={selectedWinners.includes(player) 
+                                ? `Selected as #${selectedWinners.indexOf(player) + 1} winner`
+                                : "Select as winner"
+                              }
+                            >
+                              {selectedWinners.includes(player) ? (
+                                <span style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                                  {selectedWinners.indexOf(player) + 1 === 1 ? '🥇' : 
+                                   selectedWinners.indexOf(player) + 1 === 2 ? '🥈' : '🥉'}
+                                </span>
+                              ) : (
+                                <Trophy size={14} />
+                              )}
+                            </ActionIcon>
+                          </PlayerActions>
+                        )}
                       </PlayerCard>
                     );
                   })}
@@ -1511,81 +1563,37 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                   </GlassButton>
                 )}
                 
-                {/* Add Judge Section (Players only, unlocked games) */}
-                {isPlayer && !isHost && !detailedGame.isLocked && unanimousJudges.length > 0 && (
-                  <div style={{ marginBottom: '1rem' }}>
+
+                {canVote && (
+                  <>
                     <StatusMessage variant="info">
-                      <strong>Add Trusted Judges:</strong> You can add judges from your trusted list.
+                      Select winners above using the <Trophy size={14} style={{ display: 'inline' }} /> icon. Winners are ranked by selection order (🥇🥈🥉).
+                      {detailedGame.prizeSplits && detailedGame.prizeSplits.length > 0 && (
+                        <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                          Prize splits: {detailedGame.prizeSplits.map((split, idx) => 
+                            `${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'} ${(split / 10).toFixed(1)}%`
+                          ).join(' • ')}
+                        </div>
+                      )}
                     </StatusMessage>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                      {unanimousJudges
-                        .filter(judge => !detailedGame.judges?.includes(judge))
-                        .map(judge => (
-                          <GlassButton
-                            key={judge}
-                            onClick={() => handleAddJudge(judge)}
-                            disabled={actionLoading}
-                            style={{
-                              padding: '0.5rem 0.75rem',
-                              fontSize: '0.75rem',
-                              background: 'rgba(34, 197, 94, 0.1)',
-                              borderColor: 'rgba(34, 197, 94, 0.3)',
-                              color: '#22c55e'
-                            }}
-                          >
-                            + {getDisplayNameForAddress(judge)}
-                          </GlassButton>
-                        ))
-                      }
-                    </div>
-                  </div>
+
+                    <FlexContainer justify="center">
+                      <GlassButton
+                        variant="primary"
+                        onClick={handleReportWinners}
+                        disabled={actionLoading || selectedWinners.length === 0}
+                        size="lg"
+                      >
+                        {actionLoading ? <LoadingSpinner /> : (
+                          <>
+                            <Trophy size={16} />
+                            Report Winners ({selectedWinners.length})
+                          </>
+                        )}
+                      </GlassButton>
+                    </FlexContainer>
+                  </>
                 )}
-
-                <StatusMessage variant="info">
-                  Select players above using the <Scale size={14} style={{ display: 'inline' }} /> (judge) and <Trophy size={14} style={{ display: 'inline' }} /> (winner) icons. Winners are ranked by selection order (🥇🥈🥉).
-                  {detailedGame.prizeSplits && detailedGame.prizeSplits.length > 0 && (
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
-                      Prize splits: {detailedGame.prizeSplits.map((split, idx) => 
-                        `${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'} ${(split / 10).toFixed(1)}%`
-                      ).join(' • ')}
-                    </div>
-                  )}
-                  {!detailedGame.isLocked && (
-                    <div style={{ marginTop: '0.5rem', color: '#ef4444', fontSize: '0.875rem' }}>
-                      ⚠️ Game must be locked before reporting winners.
-                    </div>
-                  )}
-                </StatusMessage>
-
-                <FlexContainer gap="1rem">
-                  <GlassButton
-                    variant="secondary"
-                    onClick={handleSetJudges}
-                    disabled={actionLoading || selectedJudges.size === 0}
-                    style={{ flex: 1 }}
-                  >
-                    {actionLoading ? <LoadingSpinner /> : (
-                      <>
-                        <Scale size={16} />
-                        Set Judges ({selectedJudges.size})
-                      </>
-                    )}
-                  </GlassButton>
-
-                  <GlassButton
-                    variant="primary"
-                    onClick={handleReportWinners}
-                    disabled={actionLoading || selectedWinners.length === 0}
-                    style={{ flex: 1 }}
-                  >
-                    {actionLoading ? <LoadingSpinner /> : (
-                      <>
-                        <Trophy size={16} />
-                        Report Winners ({selectedWinners.length})
-                      </>
-                    )}
-                  </GlassButton>
-                </FlexContainer>
             </ActionSection>
 
             {/* Claim Winnings Action */}
