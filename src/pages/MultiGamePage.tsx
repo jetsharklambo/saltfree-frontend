@@ -435,17 +435,22 @@ export default function MultiGamePage() {
                     )}
                     {game.isLocked && !game.isCompleted && (
                       <div style={{ 
-                        padding: '0.25rem 0.75rem', 
-                        backgroundColor: 'rgba(239, 68, 68, 0.2)', 
-                        borderRadius: '6px',
-                        fontSize: '0.8rem',
-                        color: '#ef4444',
+                        padding: '0.3rem 0.8rem', 
+                        background: 'rgba(251, 191, 36, 0.15)',
+                        backdropFilter: 'blur(8px)',
+                        WebkitBackdropFilter: 'blur(8px)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        borderRadius: '8px',
+                        fontSize: '0.75rem',
+                        fontWeight: '500',
+                        color: 'rgba(245, 158, 11, 0.9)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.25rem'
+                        gap: '0.3rem',
+                        textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)'
                       }}>
-                        <Lock size={12} />
-                        LOCKED
+                        <Lock size={11} />
+                        Locked
                       </div>
                     )}
                   </FlexContainer>
