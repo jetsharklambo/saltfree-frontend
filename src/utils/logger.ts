@@ -138,6 +138,19 @@ class Logger {
   }
 
   /**
+   * BigInt-safe JSON serializer
+   */
+  private safeStringify(obj: any): string {
+    return JSON.stringify(obj, (key, value) => {
+      // Convert BigInt to string for JSON serialization
+      if (typeof value === 'bigint') {
+        return value.toString() + 'n'; // Add 'n' suffix to indicate it was a BigInt
+      }
+      return value;
+    });
+  }
+
+  /**
    * Send logs to monitoring service in production
    * This would integrate with Sentry, LogRocket, or similar service
    */
@@ -165,15 +178,16 @@ class Logger {
     };
 
     // Use console methods that can be captured by log aggregation services
+    // Use BigInt-safe stringification
     switch (level) {
       case 'error':
-        console.error(JSON.stringify(logEntry));
+        console.error(this.safeStringify(logEntry));
         break;
       case 'warn':
-        console.warn(JSON.stringify(logEntry));
+        console.warn(this.safeStringify(logEntry));
         break;
       default:
-        console.info(JSON.stringify(logEntry));
+        console.info(this.safeStringify(logEntry));
     }
   }
 }

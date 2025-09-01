@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
 import { useActiveAccount } from "thirdweb/react";
-import { prepareContractCall } from 'thirdweb';
-import { sendTransaction } from 'thirdweb';
-import { waitForReceipt } from 'thirdweb';
-import { getContractEvents } from 'thirdweb';
+import { prepareContractCall, sendTransaction, waitForReceipt, getContractEvents } from 'thirdweb';
 import { X, Plus, Shield, Trash2 } from 'lucide-react';
-import { getGameContract, decodeStringFromHex, client, chain } from '../thirdweb';
+import { getGameContract, decodeStringFromHex, client, chain, CONTRACT_ADDRESS } from '../thirdweb';
 import { resolveToWalletAddress, formatResolvedAddress, ResolvedAddress } from '../utils/addressResolver';
 import { GlassModal, GlassModalContent, GlassButton, GlassInput, GlassSelect, FlexContainer, LoadingSpinner } from '../styles/glass';
 import styled from '@emotion/styled';
@@ -297,27 +294,27 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
       console.log('Judge addresses:', judgeAddresses);
 
       try {
+        console.log('Creating game...');
+        
         const transaction = prepareContractCall({
           contract,
           method: "function startGame(uint256 buyIn, uint256 maxPlayers, address[] judgeList) returns (string code)",
           params: [buyInWei, BigInt(formData.maxPlayers), judgeAddresses],
         });
-
-        console.log('Creating game...');
         
-        const result = await sendTransaction({
-          transaction,
+        const { transactionHash } = await sendTransaction({
           account,
+          transaction,
         });
 
-        console.log('Game transaction submitted! Hash:', result.transactionHash);
-        setTransactionHash(result.transactionHash);
+        console.log('Game transaction submitted! Hash:', transactionHash);
+        setTransactionHash(transactionHash);
         setTransactionState('waiting');
         
         const receiptPromise = waitForReceipt({
           client: client,
           chain: chain,
-          transactionHash: result.transactionHash,
+          transactionHash: transactionHash,
         });
         
         const timeoutPromise = new Promise((_, reject) =>
@@ -477,7 +474,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             console.log('🎯 Found GameStarted events via thirdweb:', events.length);
             
             for (const event of events) {
-              if (event.transactionHash === result.transactionHash) {
+              if (event.transactionHash === transactionHash) {
                 console.log('✅ Found matching GameStarted event:', event);
                 if (event.args && event.args.code) {
                   gameCode = event.args.code;
@@ -495,14 +492,14 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
         
         if (gameCode === 'UNKNOWN') {
           console.warn('Could not extract game code from transaction - using fallback');
-          gameCode = `GAME-${result.transactionHash.slice(-6).toUpperCase()}`;
+          gameCode = `GAME-${transactionHash.slice(-6).toUpperCase()}`;
         }
         
         onSuccess({ 
           gameCode: gameCode, 
           buyIn: formData.buyIn, 
           maxPlayers: formData.maxPlayers,
-          transactionHash: result.transactionHash,
+          transactionHash: transactionHash,
           blockNumber: receipt.blockNumber
         });
         return;

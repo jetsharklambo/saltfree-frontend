@@ -27,7 +27,6 @@ import { UsernameModal } from './UsernameModal';
 import { GameListsModal } from './GameListsModal';
 import { GameHistoryModal } from './GameHistoryModal';
 import UserDropdown from './UserDropdown';
-import JoinDropdown from './JoinDropdown';
 import { ErrorBoundarySection } from './GracefulErrorBoundary';
 import { validation } from '../utils/envUtils';
 import { logger, logGameAction } from '../utils/logger';
@@ -74,17 +73,18 @@ const DashboardContainer = styled.div`
 `;
 
 const WelcomeSection = styled.div`
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
   border-radius: 20px;
   padding: 2rem;
   text-align: center;
   margin-bottom: 2.5rem;
   box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
 `;
 
 const GamesGrid = styled.div`
@@ -105,32 +105,35 @@ const GameCard = styled(motion.div)<{
   $isUserHost?: boolean;
 }>`
   background: ${({ $isWinner, $isCompleted }) => {
-    if ($isWinner) return 'rgba(255, 215, 0, 0.12)';
-    if ($isCompleted) return 'rgba(156, 163, 175, 0.08)';
-    return 'rgba(255, 255, 255, 0.1)';
+    if ($isWinner) return 'rgba(255, 215, 0, 0.15)';
+    if ($isCompleted) return 'rgba(0, 0, 0, 0.5)';
+    return 'rgba(0, 0, 0, 0.4)';
   }};
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1.5px solid ${({ $isWinner, $isCompleted }) => {
-    if ($isWinner) return 'rgba(255, 215, 0, 0.4)';
-    if ($isCompleted) return 'rgba(156, 163, 175, 0.3)';
-    return 'rgba(255, 255, 255, 0.2)';
+    if ($isWinner) return 'rgba(255, 215, 0, 0.5)';
+    if ($isCompleted) return 'rgba(255, 255, 255, 0.1)';
+    return 'rgba(255, 255, 255, 0.15)';
   }};
   border-radius: 20px;
   padding: 1.5rem;
   box-shadow: ${({ $isWinner, $isCompleted }) => {
     if ($isWinner) return `
-      0 8px 32px rgba(255, 215, 0, 0.2),
-      0 0 40px rgba(255, 215, 0, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3)
+      0 8px 32px rgba(255, 215, 0, 0.25),
+      0 0 40px rgba(255, 215, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 0 0 1px rgba(255, 255, 255, 0.05)
     `;
     if ($isCompleted) return `
-      0 8px 32px rgba(0, 0, 0, 0.15),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1)
+      0 8px 32px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 0 1px rgba(255, 255, 255, 0.03)
     `;
     return `
-      0 8px 32px rgba(0, 0, 0, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2)
+      0 8px 32px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 0 0 1px rgba(255, 255, 255, 0.05)
     `;
   }};
   cursor: pointer;
@@ -365,9 +368,9 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
     setSelectedGame(game);
   };
 
-  const handleJoinGame = (gameCode: string, joinAsJudge: boolean = false) => {
+  const handleJoinGame = (gameCode: string) => {
     setJoinGameCode(gameCode);
-    setJoinAsJudge(joinAsJudge);
+    setJoinAsJudge(false); // Always join as player
     setShowJoinModal(true);
   };
 
@@ -763,7 +766,7 @@ const ModernGameCard: React.FC<{
   game: any; // Using any for now to handle both GameInfo and GameData
   currentUser: string;
   onClick: () => void;
-  onJoinGame?: (gameCode: string, joinAsJudge?: boolean) => void;
+  onJoinGame?: (gameCode: string) => void;
   index: number;
   account?: any;
   user?: any;
@@ -836,7 +839,7 @@ const ModernGameCard: React.FC<{
   const handleJoinClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onJoinGame) {
-      onJoinGame(gameCode, false); // Default to joining as player
+      onJoinGame(gameCode); // Always join as player
     }
   };
 
@@ -926,10 +929,15 @@ const ModernGameCard: React.FC<{
                 Locked
               </FlexContainer>
             )}
-            {game.prizeSplits && game.prizeSplits.length > 0 && (
+            {game.prizeSplits && game.prizeSplits.length > 0 ? (
               <FlexContainer align="center" gap="0.25rem" style={{ color: '#7877c6', fontSize: '0.75rem' }} title={`Prize splits: ${game.prizeSplits.map((split, idx) => `${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}${(split / 10).toFixed(1)}%`).join(' ')}`}>
                 <Trophy size={14} />
                 Custom Prizes
+              </FlexContainer>
+            ) : (
+              <FlexContainer align="center" gap="0.25rem" style={{ color: '#ffd700', fontSize: '0.75rem' }} title="Winner takes all prize money">
+                🏆
+                Winner Take All
               </FlexContainer>
             )}
           </GameStats>
@@ -970,13 +978,23 @@ const ModernGameCard: React.FC<{
           
           {/* Join button - lowest priority */}
           {canJoin && !isCompleted && (
-            <JoinDropdown
-              gameCode={gameCode}
-              buyIn={game.buyIn || '0'}
-              onJoin={(gameCode, joinAsJudge) => onJoinGame && onJoinGame(gameCode, joinAsJudge)}
-              isUserEligibleJudge={isUserEligibleJudge(gameCode, currentUser)}
-              onEligibilityCheck={() => onEligibilityCheck(gameCode)}
-            />
+            <GlassButton
+              size="sm"
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+                onJoinGame && onJoinGame(gameCode); // Always join as player
+              }}
+              style={{
+                padding: '0.5rem 0.75rem',
+                fontSize: '0.85rem',
+                background: 'rgba(34, 197, 94, 0.2)',
+                border: '1px solid rgba(34, 197, 94, 0.4)',
+                color: 'rgba(255, 255, 255, 0.9)'
+              }}
+            >
+              <Users size={14} />
+              Join ({formatEth(game.buyIn || '0')} ETH)
+            </GlassButton>
           )}
         </FlexContainer>
       </GameHeader>

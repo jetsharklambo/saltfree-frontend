@@ -31,27 +31,13 @@ const globalStyles = css`
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 
                  'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
     background: linear-gradient(135deg, 
-      rgba(16, 24, 39, 0.95) 0%, 
-      rgba(31, 41, 55, 0.85) 50%, 
-      rgba(17, 24, 39, 0.95) 100%);
-    color: rgba(255, 255, 255, 0.9);
+      #0f172a 0%, 
+      #1e293b 30%,
+      #0f172a 60%,
+      #020617 100%);
+    color: rgba(255, 255, 255, 0.95);
     min-height: 100vh;
     position: relative;
-  }
-
-  body::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: 
-      radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.2) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 40% 40%, rgba(120, 219, 226, 0.08) 0%, transparent 50%);
-    z-index: -1;
-    pointer-events: none;
   }
 
   #root {
@@ -84,6 +70,21 @@ const AppContainer = styled.div`
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  position: relative;
+`;
+
+const BackgroundOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.06) 0%, transparent 70%),
+    radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.03) 0%, transparent 70%),
+    radial-gradient(circle at 40% 40%, rgba(120, 219, 226, 0.02) 0%, transparent 70%);
+  z-index: 0;
+  pointer-events: none;
 `;
 
 const WalletBar = styled.div`
@@ -131,6 +132,8 @@ const StyledConnectButton = styled.div`
 const MainContent = styled.main`
   flex: 1;
   padding-top: 5rem;
+  position: relative;
+  z-index: 1;
   
   @media (max-width: 768px) {
     padding-top: 6rem;
@@ -157,11 +160,12 @@ function App() {
               console.error('🚨 App-level error (non-blocking):', error, errorInfo);
             }
           }}>
-          <ThirdwebProvider client={client}>
+          <ThirdwebProvider>
             <UserProvider>
               <GameDataProvider>
                 <Global styles={globalStyles} />
                 <AppContainer>
+                <BackgroundOverlay />
                 <WalletBar>
                   <StyledConnectButton>
                     <ConnectButton 

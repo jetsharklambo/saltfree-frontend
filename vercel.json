@@ -1,24 +1,15 @@
 {
-  "version": 2,
-  "name": "pony-up-rc2",
-  "public": false,
-  "builds": [
+  "buildCommand": "npm run build",
+  "installCommand": "npm install --legacy-peer-deps",
+  "outputDirectory": "build",
+  "rewrites": [
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/game/([^/]+)",
-      "dest": "/index.html"
+      "source": "/game/(.*)",
+      "destination": "/index.html"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/((?!static|favicon.ico|robots.txt|manifest.json).*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
@@ -52,8 +43,5 @@
         }
       ]
     }
-  ],
-  "env": {
-    "GENERATE_SOURCEMAP": "false"
-  }
+  ]
 }

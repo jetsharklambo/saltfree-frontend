@@ -40,7 +40,7 @@ interface GameDetailPageProps {
 const PageContainer = styled.div`
   min-height: 100vh;
   padding: 2rem;
-  background: transparent;
+  background: transparent; /* Inherits from App gradient background */
   
   @media (max-width: 768px) {
     padding: 1rem;
@@ -59,6 +59,14 @@ const GameCard = styled(GlassCard)`
   max-width: 800px;
   margin: 0 auto 2rem auto;
   padding: 2rem;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
   
   @media (max-width: 768px) {
     padding: 1.5rem;
@@ -80,8 +88,9 @@ const GameHeader = styled.div`
 const GameTitle = styled.h1`
   font-size: 2.5rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(255, 255, 255, 0.98);
   margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
   
   @media (max-width: 768px) {
     font-size: 2rem;
@@ -98,18 +107,28 @@ const GameStats = styled.div`
 const StatCard = styled(GlassCard)`
   padding: 1.5rem;
   text-align: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
 `;
 
 const StatValue = styled.div`
   font-size: 1.5rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   margin-bottom: 0.5rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
 `;
 
 const StatLabel = styled.div`
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 `;
@@ -130,6 +149,14 @@ const PlayerCard = styled(GlassCard)`
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
 `;
 
 const ErrorMessage = styled.div`
@@ -216,9 +243,9 @@ const DecisionBadge = styled.div<{ type: 'players' | 'judges' }>`
   font-weight: 600;
   color: ${props => 
     props.type === 'judges' 
-      ? 'rgba(255, 255, 255, 0.85)' 
-      : 'rgba(255, 255, 255, 0.9)'};
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      ? 'rgba(255, 255, 255, 0.95)' 
+      : 'rgba(255, 255, 255, 0.95)'};
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 `;
 
@@ -529,8 +556,8 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
         let actualGameCode = '';
         let host = '';
         let buyIn: bigint = BigInt(0);
-        let maxPlayers = 0;
-        let playerCount = 0;
+        let maxPlayers = BigInt(0);
+        let playerCount = BigInt(0);
         let isLocked = false;
         let players: string[] = [];
         let prizeSplits: number[] = [];
@@ -546,7 +573,7 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
               contract,
               method: "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
               params: [codeVariation],
-            }) as [string, bigint, number, number, boolean, bigint[], string[]];
+            }) as [string, bigint, bigint, bigint, boolean, bigint[], string[]];
 
             const [gameHost, gameBuyIn, gameMaxPlayers, gamePlayerCount, gameIsLocked, prizeSplitsBigInt, gameJudges] = gameInfo;
 
@@ -604,13 +631,16 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
           isCompleted = false;
         }
 
+        // Use players.length as fallback if playerCount is 0 or doesn't match reality
+        const actualPlayerCount = Math.max(Number(playerCount), players.length);
+
         const gameData: GameInfo = {
           gameCode: actualGameCode, // Use the actual code that worked
           host,
           buyIn: buyIn.toString(),
-          maxPlayers,
-          playerCount,
-          currentPlayers: players.length,
+          maxPlayers: Number(maxPlayers),
+          playerCount: actualPlayerCount,
+          currentPlayers: players.length, // Always use actual players array length
           players,
           isLocked,
           isCompleted,
@@ -621,16 +651,24 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
 
         setGame(gameData);
         setError(null);
-        
-        // Load display names for all addresses
-        await loadDisplayNames(gameData);
-        
-        logGameAction('Game detail page loaded', actualGameCode, {
-          host,
-          playerCount,
-          isCompleted,
-          originalUrl: gameCode, // Log what user typed vs what we found
+        setLoading(false);  // Allow page to render immediately
+
+        // Load display names asynchronously (non-blocking)
+        loadDisplayNames(gameData).catch(error => {
+          console.warn('Display names loading failed:', error);
         });
+        
+        // Safely log the action
+        try {
+          logGameAction('Game detail page loaded', actualGameCode, {
+            host,
+            playerCount: Number(playerCount),
+            isCompleted,
+            originalUrl: gameCode, // Log what user typed vs what we found
+          });
+        } catch (logError) {
+          console.warn('Failed to log game action:', logError);
+        }
 
         // If autoJoin is true, show the modal
         if (autoJoin && account?.address) {
@@ -640,8 +678,9 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
       } catch (err) {
         console.error('Failed to load game:', err);
         setError(`Failed to load game ${gameCode}. Please check if the game exists.`);
-      } finally {
         setLoading(false);
+      } finally {
+        // Loading state is managed in success and error cases above
       }
     };
 
@@ -773,11 +812,21 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
       
       console.log('🏆 Reporting winners in rank order:', selectedWinners, 'for game:', game.gameCode);
       
+      // For winner-take-all games (no prize splits), ensure we only submit one winner
+      let winnersToSubmit = selectedWinners;
+      const isWinnerTakeAll = !game.prizeSplits || game.prizeSplits.length === 0 || 
+                              (game.prizeSplits.length === 1 && game.prizeSplits[0] === 1000);
+                              
+      if (isWinnerTakeAll && selectedWinners.length > 0) {
+        winnersToSubmit = [selectedWinners[0]]; // Only take the first winner for winner-take-all
+        console.log('🏆 Winner-take-all game: submitting only first winner:', winnersToSubmit);
+      }
+      
       const contract = getGameContract();
       const transaction = prepareContractCall({
         contract,
         method: "function reportWinners(string code, address[] winners)",
-        params: [game.gameCode, selectedWinners]
+        params: [game.gameCode, winnersToSubmit]
       });
 
       const receipt = await sendTransaction({
@@ -1010,7 +1059,7 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
           <GameHeader>
             <div>
               <GameTitle>{gameCode}</GameTitle>
-              <p style={{ color: 'rgba(255, 255, 255, 0.7)', margin: '0.5rem 0 0 0' }}>
+              <p style={{ color: 'rgba(255, 255, 255, 0.9)', textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)', margin: '0.5rem 0 0 0' }}>
                 Hosted by {getDisplayNameForAddress(game.host)}
               </p>
             </div>
@@ -1306,9 +1355,9 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                   return (
                     <PlayerCard key={player} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <Users size={16} style={{ color: 'rgba(255, 255, 255, 0.6)' }} />
+                        <Users size={16} style={{ color: 'rgba(255, 255, 255, 0.9)' }} />
                         <div>
-                          <div style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
+                          <div style={{ color: 'rgba(255, 255, 255, 0.95)', textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)' }}>
                             {getDisplayNameForAddress(player)}
                           </div>
                           {game.winners.includes(player) && (() => {
@@ -1447,7 +1496,7 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                 })}
               </PlayersList>
             ) : (
-              <p style={{ color: 'rgba(255, 255, 255, 0.6)', textAlign: 'center', padding: '2rem' }}>
+              <p style={{ color: 'rgba(255, 255, 255, 0.9)', textAlign: 'center', padding: '2rem', textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)' }}>
                 No players joined yet
               </p>
             )}

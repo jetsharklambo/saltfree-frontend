@@ -90,3 +90,4 @@ docker-compose.override.yml
 .history/
 .vscode/settings.json
 .idea/workspace.xml
+.vercel

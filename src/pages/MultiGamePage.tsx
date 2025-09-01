@@ -222,11 +222,11 @@ export default function MultiGamePage() {
       try {
         const gameInfo = await readContract({
           contract,
-          method: "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint8 maxPlayers, uint8 playerCount, bool isLocked)",
+          method: "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
           params: [codeVariation],
-        }) as [string, bigint, number, number, boolean];
+        }) as [string, bigint, bigint, bigint, boolean, bigint[], string[]];
 
-        const [host, buyIn, maxPlayers, playerCount, isLocked] = gameInfo;
+        const [host, buyIn, maxPlayers, playerCount, isLocked, splits, judges] = gameInfo;
 
         // Check if game exists
         if (host !== '0x0000000000000000000000000000000000000000') {
@@ -265,8 +265,8 @@ export default function MultiGamePage() {
             gameCode: codeVariation,
             host,
             buyIn: buyIn.toString(),
-            maxPlayers,
-            playerCount,
+            maxPlayers: Number(maxPlayers),
+            playerCount: Number(playerCount),
             currentPlayers: players.length,
             players,
             isLocked,

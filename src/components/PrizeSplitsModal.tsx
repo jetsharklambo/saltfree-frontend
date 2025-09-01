@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveAccount } from "thirdweb/react";
-import { prepareContractCall } from 'thirdweb';
-import { sendTransaction } from 'thirdweb';
-import { waitForReceipt } from 'thirdweb';
+import { prepareContractCall, sendTransaction, waitForReceipt } from 'thirdweb';
 import { X, Trophy, Percent, Award } from 'lucide-react';
 import { getGameContract, validatePrizeSplits, formatPrizeSplit } from '../thirdweb';
 import { 
@@ -145,7 +143,7 @@ const InfoBox = styled.div`
 `;
 
 const presets = [
-  { name: 'Winner Takes All', splits: [] },
+  { name: '🏆 Winner Takes All', splits: [] },
   { name: '60/40', splits: [600, 400] },
   { name: '50/30/20', splits: [500, 300, 200] },
   { name: '70/20/10', splits: [700, 200, 100] },

@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveAccount } from "thirdweb/react";
-import { prepareContractCall } from "thirdweb";
-import { sendTransaction } from "thirdweb";
-import { readContract } from "thirdweb";
+import { prepareContractCall, sendTransaction, readContract } from "thirdweb";
 import { X, Users, Search, Shield } from 'lucide-react';
 import { gameContract, formatEth, formatAddress } from '../thirdweb';
 import { logBuyInInfo, formatBuyInForDisplay, compareTransactionParams } from '../utils/buyInUtils';
@@ -176,12 +174,12 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
       setError('');
       setGameInfo(null);
 
-      // Fetch game info from actual deployed contract (returns [host, buyIn, maxPlayers, playerCount])
-      const [host, buyIn, maxPlayers, playerCount] = await readContract({
+      // Fetch game info from actual deployed contract (returns [host, buyIn, maxPlayers, playerCount, isLocked, splits, judges])
+      const [host, buyIn, maxPlayers, playerCount, isLocked, splits, judges] = await readContract({
         contract,
-        method: "function getGameInfo(string code) view returns (address host, uint256 maxPlayers, uint256 buyIn, uint256 playerCount)",
+        method: "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
         params: [gameCode.toUpperCase()],
-      }) as [string, bigint, bigint, number];
+      }) as [string, bigint, bigint, bigint, boolean, bigint[], string[]];
       
       // Validate the host address to ensure game exists
       if (host === "0x0000000000000000000000000000000000000000") {
@@ -194,7 +192,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
       // Log contract buy-in for debugging
       logBuyInInfo('JoinGameModal loaded', gameCode.toUpperCase(), buyIn, 'direct contract return');
 
-      if (playerCount >= Number(maxPlayers)) {
+      if (Number(playerCount) >= Number(maxPlayers)) {
         setError('Game is full');
         return;
       }
@@ -204,7 +202,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
         host: host,
         buyIn: buyIn.toString(),
         maxPlayers: Number(maxPlayers),
-        playerCount: playerCount,
+        playerCount: Number(playerCount),
         formattedBuyIn: formatBuyInForDisplay(buyIn)
       });
     } catch (err: any) {

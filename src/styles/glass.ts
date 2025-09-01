@@ -6,48 +6,50 @@ export const glassTheme = {
   primary: 'rgba(120, 119, 198, 0.3)',
   secondary: 'rgba(255, 119, 198, 0.15)',
   accent: 'rgba(120, 219, 226, 0.2)',
-  surface: 'rgba(255, 255, 255, 0.1)',
-  surfaceHover: 'rgba(255, 255, 255, 0.15)',
-  border: 'rgba(255, 255, 255, 0.2)',
-  text: 'rgba(255, 255, 255, 0.9)',
-  textSecondary: 'rgba(255, 255, 255, 0.7)',
-  textMuted: 'rgba(255, 255, 255, 0.5)',
+  surface: 'rgba(0, 0, 0, 0.4)',
+  surfaceHover: 'rgba(0, 0, 0, 0.5)',
+  border: 'rgba(255, 255, 255, 0.15)',
+  text: 'rgba(255, 255, 255, 0.95)',
+  textSecondary: 'rgba(255, 255, 255, 0.85)',
+  textMuted: 'rgba(255, 255, 255, 0.7)',
   success: 'rgba(34, 197, 94, 0.3)',
   warning: 'rgba(251, 191, 36, 0.3)',
   error: 'rgba(239, 68, 68, 0.3)',
-  shadow: 'rgba(0, 0, 0, 0.3)',
+  shadow: 'rgba(0, 0, 0, 0.35)',
 };
 
 // Glass effects mixins
 export const glassEffect = css`
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
 `;
 
 export const strongGlassEffect = css`
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow: 
-    0 16px 48px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+    0 16px 48px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
 `;
 
 export const subtleGlassEffect = css`
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 
-    0 4px 16px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
 `;
 
 // Animation keyframes
@@ -111,10 +113,11 @@ export const GlassCard = styled.div<{
     
     &:hover {
       transform: translateY(-4px);
-      background: rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.5);
       box-shadow: 
-        0 16px 48px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        0 16px 48px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15),
+        0 0 0 1px rgba(255, 255, 255, 0.08);
     }
   `}
   
@@ -243,8 +246,8 @@ export const GlassInput = styled.input<{
   width: 100%;
   padding: 0.875rem 1rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid ${({ hasError }) => hasError ? glassTheme.error : 'rgba(255, 255, 255, 0.1)'};
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid ${({ hasError }) => hasError ? glassTheme.error : 'rgba(255, 255, 255, 0.12)'};
   color: ${glassTheme.text};
   font-size: 1rem;
   font-family: inherit;
@@ -257,10 +260,10 @@ export const GlassInput = styled.input<{
   &:focus {
     outline: none;
     border-color: ${glassTheme.primary};
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.4);
     box-shadow: 
-      0 0 0 2px rgba(120, 119, 198, 0.2),
-      0 4px 16px rgba(0, 0, 0, 0.2);
+      0 0 0 2px rgba(120, 119, 198, 0.3),
+      0 4px 16px rgba(0, 0, 0, 0.25);
   }
   
   ${media.mobile} {
@@ -275,8 +278,8 @@ export const GlassSelect = styled.select`
   width: 100%;
   padding: 0.875rem 1rem;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: ${glassTheme.text};
   font-size: 1rem;
   font-family: inherit;
@@ -286,10 +289,10 @@ export const GlassSelect = styled.select`
   &:focus {
     outline: none;
     border-color: ${glassTheme.primary};
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.4);
     box-shadow: 
-      0 0 0 2px rgba(120, 119, 198, 0.2),
-      0 4px 16px rgba(0, 0, 0, 0.2);
+      0 0 0 2px rgba(120, 119, 198, 0.3),
+      0 4px 16px rgba(0, 0, 0, 0.25);
   }
   
   option {
@@ -309,8 +312,9 @@ export const GlassModal = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;

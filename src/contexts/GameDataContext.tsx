@@ -741,13 +741,13 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         throw new Error(`Game ${sanitizedGameCode} is already in your list`);
       }
 
-      // Fetch game info from actual deployed contract (returns [host, buyIn, maxPlayers, playerCount])
+      // Fetch game info from actual deployed contract (returns [host, buyIn, maxPlayers, playerCount, isLocked, splits, judges])
       const contract = await getGameContract();
-      const [host, buyIn, maxPlayers, playerCount] = await safeReadContract({
+      const [host, buyIn, maxPlayers, playerCount, isLocked, splits, judges] = await safeReadContract({
         contract,
-        method: "function getGameInfo(string code) view returns (address host, uint256 maxPlayers, uint256 buyIn, uint256 playerCount)",
+        method: "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
         params: [sanitizedGameCode]
-      }) as [string, bigint, bigint, number];
+      }) as [string, bigint, bigint, bigint, boolean, bigint[], string[]];
 
       logger.debug(`Game info retrieved`, {
         component: 'GameDataContext',
@@ -777,12 +777,15 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       logBuyInInfo('GameDataContext detected', gameCode, buyIn, 'direct contract return');
 
       // Create game data using contract values directly
+      // Use players.length as fallback if playerCount is 0 or missing
+      const actualPlayerCount = Number(playerCount) > 0 ? Number(playerCount) : (players?.length || 0);
+      
       const gameData: GameData = {
         code: gameCode,
         host: host,
         buyIn: buyIn.toString(), // Keep as wei string
         maxPlayers: Number(maxPlayers),
-        playerCount: playerCount,
+        playerCount: actualPlayerCount,
         players: players || [],
         userRole: 'unknown'
       };

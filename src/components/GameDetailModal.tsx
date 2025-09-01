@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveAccount } from "thirdweb/react";
-import { prepareContractCall } from 'thirdweb';
-import { sendTransaction } from 'thirdweb';
-import { waitForReceipt } from 'thirdweb';
-import { readContract } from 'thirdweb';
+import { prepareContractCall, sendTransaction, waitForReceipt, readContract } from 'thirdweb';
 import { X, Users, Coins, Clock, Crown, Trophy, AlertCircle, Scale, Lock, Unlock, Copy, Share2, ExternalLink, Check } from 'lucide-react';
 import { getGameContract, formatAddress, formatEth, decodeStringFromHex, formatPrizeSplit } from '../thirdweb';
 import { logBuyInInfo, formatBuyInForDisplay } from '../utils/buyInUtils';
@@ -696,7 +693,7 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       const [gameInfo, players, judges, unanimousJudgesResult] = await Promise.allSettled([
         readContract({
           contract,
-          method: "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits)",
+          method: "function getGameInfo(string code) view returns (address host, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
           params: [game.code]
         }),
         readContract({
@@ -716,7 +713,11 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         })
       ]);
 
-      let updatedGame: DetailedGameData = { ...game };
+      let updatedGame: DetailedGameData = { 
+        ...game,
+        players: [], // Initialize with empty array
+        judges: []   // Initialize with empty array
+      };
 
       // Enhanced logging and robust field mapping
       console.log(`📊 Contract call results for ${game.code}:`, {
@@ -727,7 +728,7 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       });
 
       if (gameInfo.status === 'fulfilled') {
-        const [host, buyIn, maxPlayers, playerCount, isLocked, prizeSplitsBigInt] = gameInfo.value as [string, bigint, bigint, number, boolean, bigint[]];
+        const [host, buyIn, maxPlayers, playerCount, isLocked, prizeSplitsBigInt, inGameJudgesFromGameInfo] = gameInfo.value as [string, bigint, bigint, bigint, boolean, bigint[], string[]];
         const prizeSplits = prizeSplitsBigInt.map(split => Number(split));
         
         console.log(`🔍 GameDetailModal for ${game.code}: buyIn=${buyIn.toString()}, maxPlayers=${maxPlayers.toString()}, isLocked=${isLocked}, prizeSplits=${prizeSplits}`);
@@ -740,7 +741,7 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
           host: host,
           buyIn: buyIn.toString(),
           maxPlayers: Number(maxPlayers),
-          playerCount: playerCount,
+          playerCount: Number(playerCount),
           isLocked: isLocked,
           prizeSplits: prizeSplits
         };
@@ -750,6 +751,15 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
 
       if (players.status === 'fulfilled') {
         updatedGame.players = players.value as string[];
+        
+        // Use players.length as fallback if playerCount seems incorrect
+        if (updatedGame.playerCount !== undefined && updatedGame.players) {
+          const actualPlayerCount = Math.max(updatedGame.playerCount || 0, updatedGame.players.length);
+          if (actualPlayerCount !== updatedGame.playerCount) {
+            console.log(`📊 Correcting player count from ${updatedGame.playerCount} to ${actualPlayerCount} based on players array`);
+            updatedGame.playerCount = actualPlayerCount;
+          }
+        }
         console.log(`✅ Loaded ${updatedGame.players.length} players for ${game.code}:`, updatedGame.players);
       } else if (players.status === 'rejected') {
         console.error(`❌ Failed to load players for ${game.code}:`, players.reason);
@@ -916,6 +926,11 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
 
       setDetailedGame(updatedGame);
       console.log('✅ Game details loaded:', updatedGame);
+      console.log('🔍 Players array check:', {
+        playersExists: !!updatedGame.players,
+        playersLength: updatedGame.players?.length,
+        playersData: updatedGame.players
+      });
       
       // Load display names for all addresses
       await loadDisplayNames(updatedGame);
@@ -1107,15 +1122,22 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       setActionLoading(true);
       setError('');
 
-      // Winners are already in rank order from the selectedWinners array
-      const winners = selectedWinners;
+      // For winner-take-all games (no prize splits), ensure we only submit one winner
+      let winnersToSubmit = selectedWinners;
+      const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 || 
+                              (detailedGame.prizeSplits.length === 1 && detailedGame.prizeSplits[0] === 1000);
+                              
+      if (isWinnerTakeAll && selectedWinners.length > 0) {
+        winnersToSubmit = [selectedWinners[0]]; // Only take the first winner for winner-take-all
+        console.log('🏆 Winner-take-all game: submitting only first winner:', winnersToSubmit);
+      }
       
-      console.log('Reporting winners in rank order:', winners);
+      console.log('Reporting winners in rank order:', winnersToSubmit);
       
       const transaction = prepareContractCall({
         contract,
         method: "function reportWinners(string code, address[] winners)",
-        params: [game.code, winners],
+        params: [game.code, winnersToSubmit],
       });
 
       const result = await sendTransaction({
