@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { getGameContract, decodeStringFromHex, CONTRACT_ADDRESS } from '../thirdweb';
+import { getGameContract, decodeStringFromHex, decodeGameStartedEvent, decodePlayerJoinedEvent, decodeGameLockedEvent, decodeWinnersReportedEvent, CONTRACT_ADDRESS } from '../thirdweb';
 import { logBuyInInfo } from '../utils/buyInUtils';
 import { databaseService } from '../services/databaseService';
 import { useUser } from './UserContext';
 import { logger, logGameAction, logContractCall, logPerformance } from '../utils/logger';
 import { validation } from '../utils/envUtils';
+import { pollForRecentGames } from '../utils/gamePolling';
 
 import { readContract, getContractEvents, getRpcClient, eth_blockNumber, prepareEvent, eth_getLogs } from 'thirdweb';
 
@@ -267,12 +268,12 @@ function getEventName(signature?: string): string | null {
   if (!signature) return null;
   
   const eventMap: Record<string, string> = {
-    '0x0518a6eadbf1c70185fe974736fa2022919eed726a4027cd4b9525f1d7feb03a': 'GameStarted',
-    '0x39295572f1ca17725c1e2c253d71bc653406c2f4ebe6e7eeb82fe3c3acb72751': 'PlayerJoined',
-    '0xc83727715d9b58d35c2b5aa93e8e9144b9f66c103994a03bbafa82b473c142b2': 'WinnersReported',
-    '0xa5a4c7c1e3d0b75b36b5b8b3f4c7d5c8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6': 'WinnerApproved',
-    '0xb6b5c8c2f4e1d86c47c6c9c4e3f8e6d9bac3d4e5f6a7b8c9d0e1f2a3b4c5d6e7': 'WinnerConfirmed',
-    '0xc7c6d9d3e5f2e97d58d7dae5f4e9f7eacbd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8': 'WinningsClaimed'
+    '0x2c74b4faa02f74a9d76da4ef4ffdef63f9c57dbd733375f5f9ec6a9d2e9d3b83': 'GameStarted', // Updated from actual transaction logs
+    '0x6426ed08b4816b27e58d721b4ff6fb44e6696b9d5ca257dcbd4b0576eb4dc539': 'PlayerJoined',
+    '0xf8ff7b65f89533529cfb22afeca74e7a0a22760b35258fa00cf0388cd2c13bb3': 'WinnersReported',
+    '0xe3574ea7f4f8590b62692642ffda0055801ec44f42c76bcaa9c45453da24319f': 'GameLocked',
+    '0x7175967b5ddee4d7986318165167133a8c193aa59b05f411ec131d4f124a3f3d': 'WinningsClaimed',
+    '0x8a3f510bd40a2bff6e6502777e1359083e910aef0aa28a765f4fa8d84871ba67': 'PrizeSplitsSet'
   };
   
   return eventMap[signature.toLowerCase()] || null;
@@ -564,6 +565,9 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setLoading(false);
     }, 30000);
 
+    // Keep track of when this search started (for finding newer games)
+    const searchStartTime = Date.now();
+
     try {
       console.log('🔍 Finding games for wallet:', userAddress);
       
@@ -576,33 +580,70 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.log(`📊 Current block: ${currentBlock}`);
       
       try {
-        // NEW APPROACH: Use wallet-based search for ultra-efficiency  
+        // ENHANCED APPROACH: First check for very recent games, then use wallet-based search  
         const contract = await getGameContract();
-        const lastInteractionBlock = await findLastContractInteraction(userAddress, contract.address, currentBlock);
         
-        if (!lastInteractionBlock) {
-          console.log('📭 No wallet interactions found with contract');
-          setGames([]);
-          return;
-        }
+        // Step 1: Check for new games in the last 5000 blocks (most recent activity)
+        console.log('🔍 First checking for very recent games in last 5000 blocks...');
+        const recentFromBlock = Math.max(0, currentBlock - 5000);
         
-        console.log(`🎯 Last wallet interaction at block ${lastInteractionBlock}, searching focused range`);
-        
-        // Step 2: Focused search around the last interaction (much smaller range)
-        const searchRadius = 10000; // 20k total blocks (10k before + 10k after)  
-        const searchFromBlock = Math.max(0, lastInteractionBlock - searchRadius);
-        const searchToBlock = Math.min(lastInteractionBlock + searchRadius, currentBlock); // Cap at current block
-        
-        console.log(`🔍 Focused search: blocks ${searchFromBlock} to ${searchToBlock} (±${searchRadius}, ~20k total)`);
-        
-        const userInvolvedEvents = await getEventsViaRPC({
+        const recentEvents = await getEventsViaRPC({
           contract,
-          fromBlock: searchFromBlock,
-          toBlock: searchToBlock,
+          fromBlock: recentFromBlock,
+          toBlock: currentBlock,
           userAddress: userAddress,
         });
         
-        console.log(`👤 Found ${userInvolvedEvents.length} events involving user in focused range`);
+        console.log(`📊 Found ${recentEvents.length} recent events in last 5000 blocks`);
+        
+        // Step 2: Find last wallet interaction for broader historical search
+        const lastInteractionBlock = await findLastContractInteraction(userAddress, contract.address, currentBlock);
+        
+        let historicalEvents: any[] = [];
+        if (lastInteractionBlock) {
+          console.log(`🎯 Last wallet interaction at block ${lastInteractionBlock}, searching focused range`);
+          
+          // Step 3: Focused search around the last interaction (much smaller range)
+          const searchRadius = 10000; // 20k total blocks (10k before + 10k after)  
+          const searchFromBlock = Math.max(0, lastInteractionBlock - searchRadius);
+          const searchToBlock = Math.min(lastInteractionBlock + searchRadius, Math.max(recentFromBlock - 1, lastInteractionBlock)); // Don't overlap with recent search
+          
+          if (searchToBlock > searchFromBlock) {
+            console.log(`🔍 Historical search: blocks ${searchFromBlock} to ${searchToBlock} (±${searchRadius}, ~20k total)`);
+            
+            historicalEvents = await getEventsViaRPC({
+              contract,
+              fromBlock: searchFromBlock,
+              toBlock: searchToBlock,
+              userAddress: userAddress,
+            });
+            
+            console.log(`👤 Found ${historicalEvents.length} historical events involving user`);
+          }
+        } else {
+          console.log('📭 No wallet interactions found with contract, using fallback search');
+        }
+        
+        // Combine recent and historical events
+        const userInvolvedEvents = [...recentEvents, ...historicalEvents];
+        console.log(`👤 Found ${userInvolvedEvents.length} total events involving user (${recentEvents.length} recent + ${historicalEvents.length} historical)`);
+        
+        // NEW: Try polling for very recent games first (last 50 blocks)
+        console.log('🔄 Trying polling for very recent games...');
+        try {
+          const polledGames = await pollForRecentGames(userAddress, currentBlock, 50);
+          if (polledGames.length > 0) {
+            console.log(`🎯 Polling found ${polledGames.length} very recent games:`, polledGames);
+            polledGames.forEach(gameCode => {
+              if (gameCodesSet.size < displayLimit) {
+                gameCodesSet.add(gameCode);
+                console.log(`✨ Added game from polling: ${gameCode}`);
+              }
+            });
+          }
+        } catch (error) {
+          console.warn('⚠️ Polling failed, continuing with event processing:', error);
+        }
         
         // Sort events by block number (newest first)
         const sortedEvents = userInvolvedEvents.sort((a: any, b: any) => {
@@ -611,23 +652,48 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return blockB - blockA;
         });
         
-        // Process events to extract game codes
-        sortedEvents.forEach((event: any) => {
-          if (gameCodesSet.size >= displayLimit) return; // Stop once we have enough
-          
-          let gameCode = null;
-          
-          // Try to extract game code from event data
-          if (event.data && event.data.length > 2) {
-            gameCode = decodeStringFromHex(event.data);
-          }
-          
-          if (gameCode && gameCode.length >= 3 && gameCode.length <= 10 && /^[A-Z0-9-]+$/i.test(gameCode)) {
-            const eventName = getEventName(event.topics?.[0]);
-            gameCodesSet.add(gameCode);
-            console.log(`✨ Added game from ${eventName || 'unknown'} event: ${gameCode}`);
-          }
-        });
+        // Process events to extract game codes (skip if we already have enough from polling)
+        if (gameCodesSet.size < displayLimit) {
+          sortedEvents.forEach((event: any) => {
+            if (gameCodesSet.size >= displayLimit) return; // Stop once we have enough
+            
+            let gameCode = null;
+            const eventSignature = event.topics?.[0];
+            const eventName = getEventName(eventSignature);
+            
+            // Use appropriate decoder based on event type
+            if (event.data && event.data.length > 2) {
+              switch (eventSignature) {
+                case '0x2c74b4faa02f74a9d76da4ef4ffdef63f9c57dbd733375f5f9ec6a9d2e9d3b83': // GameStarted
+                  const gameStartedData = decodeGameStartedEvent(event.data);
+                  gameCode = gameStartedData?.code || null;
+                  break;
+                case '0x6426ed08b4816b27e58d721b4ff6fb44e6696b9d5ca257dcbd4b0576eb4dc539': // PlayerJoined
+                  gameCode = decodePlayerJoinedEvent(event.data);
+                  break;
+                case '0xe3574ea7f4f8590b62692642ffda0055801ec44f42c76bcaa9c45453da24319f': // GameLocked
+                  gameCode = decodeGameLockedEvent(event.data);
+                  break;
+                case '0xf8ff7b65f89533529cfb22afeca74e7a0a22760b35258fa00cf0388cd2c13bb3': // WinnersReported
+                  gameCode = decodeWinnersReportedEvent(event.data);
+                  break;
+                case '0x7175967b5ddee4d7986318165167133a8c193aa59b05f411ec131d4f124a3f3d': // WinningsClaimed
+                case '0x8a3f510bd40a2bff6e6502777e1359083e910aef0aa28a765f4fa8d84871ba67': // PrizeSplitsSet
+                  gameCode = decodeStringFromHex(event.data); // Fallback for simple events
+                  break;
+                default:
+                  console.log(`🔍 Unknown event signature: ${eventSignature}, using fallback decoder`);
+                  gameCode = decodeStringFromHex(event.data);
+                  break;
+              }
+            }
+            
+            if (gameCode && gameCode.length >= 3 && gameCode.length <= 10 && /^[A-Z0-9-]+$/i.test(gameCode)) {
+              gameCodesSet.add(gameCode);
+              console.log(`✨ Added game from ${eventName || 'unknown'} event: ${gameCode}`);
+            }
+          });
+        }
         
       } catch (error) {
         console.error('❌ Smart search failed:', error);
@@ -639,12 +705,13 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.log(`🏁 Smart search completed: Found ${gameCodes.length} games: [${gameCodes.join(', ')}]`);
       
       if (gameCodes.length === 0) {
-        console.log('📭 No games found with progressive search strategy, trying fallback search...');
+        console.log('📭 No games found with enhanced search strategy, trying extended fallback...');
         
-        // Fallback: Search last 6 days directly from current block
+        // Extended Fallback: Search last 10 days with emphasis on recent blocks
         try {
-          console.log('🔄 Fallback: Searching last 6 days from current block...');
-          const fallbackFromBlock = Math.max(0, currentBlock - BLOCKS_IN_6_DAYS);
+          console.log('🔄 Extended fallback: Searching last 10 days with recent block emphasis...');
+          const extendedBlocks = Math.floor(BLOCKS_IN_6_DAYS * 1.67); // ~10 days
+          const fallbackFromBlock = Math.max(0, currentBlock - extendedBlocks);
           const fallbackContract = await getGameContract();
           
           const fallbackEvents = await getEventsViaRPC({
@@ -654,20 +721,44 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             userAddress: userAddress,
           });
           
-          console.log(`📦 Fallback found ${fallbackEvents.length} events in last 6 days`);
+          console.log(`📦 Extended fallback found ${fallbackEvents.length} events in last 10 days`);
           
           const fallbackGameCodes = new Set<string>();
           fallbackEvents.forEach((event: any) => {
             let gameCode = null;
+            const eventSignature = event.topics?.[0];
+            const eventName = getEventName(eventSignature);
             
-            // Try to extract game code from event data
+            // Use appropriate decoder based on event type
             if (event.data && event.data.length > 2) {
-              gameCode = decodeStringFromHex(event.data);
+              switch (eventSignature) {
+                case '0x2c74b4faa02f74a9d76da4ef4ffdef63f9c57dbd733375f5f9ec6a9d2e9d3b83': // GameStarted
+                  const gameStartedData = decodeGameStartedEvent(event.data);
+                  gameCode = gameStartedData?.code || null;
+                  break;
+                case '0x6426ed08b4816b27e58d721b4ff6fb44e6696b9d5ca257dcbd4b0576eb4dc539': // PlayerJoined
+                  gameCode = decodePlayerJoinedEvent(event.data);
+                  break;
+                case '0xe3574ea7f4f8590b62692642ffda0055801ec44f42c76bcaa9c45453da24319f': // GameLocked
+                  gameCode = decodeGameLockedEvent(event.data);
+                  break;
+                case '0xf8ff7b65f89533529cfb22afeca74e7a0a22760b35258fa00cf0388cd2c13bb3': // WinnersReported
+                  gameCode = decodeWinnersReportedEvent(event.data);
+                  break;
+                case '0x7175967b5ddee4d7986318165167133a8c193aa59b05f411ec131d4f124a3f3d': // WinningsClaimed
+                case '0x8a3f510bd40a2bff6e6502777e1359083e910aef0aa28a765f4fa8d84871ba67': // PrizeSplitsSet
+                  gameCode = decodeStringFromHex(event.data); // Fallback for simple events
+                  break;
+                default:
+                  console.log(`🔍 Fallback: Unknown event signature: ${eventSignature}, using fallback decoder`);
+                  gameCode = decodeStringFromHex(event.data);
+                  break;
+              }
             }
             
             if (gameCode && gameCode.length >= 3 && gameCode.length <= 10 && /^[A-Z0-9-]+$/i.test(gameCode)) {
               fallbackGameCodes.add(gameCode);
-              console.log(`✨ Fallback found game: ${gameCode}`);
+              console.log(`✨ Fallback found game from ${eventName || 'unknown'} event: ${gameCode}`);
             }
           });
           

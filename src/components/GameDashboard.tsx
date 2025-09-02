@@ -3,6 +3,7 @@ import { useActiveAccount } from "thirdweb/react";
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { readContract } from 'thirdweb';
+import toast from 'react-hot-toast';
 import { Plus, Users, Clock, Lock, RefreshCw, Search, Trophy, Share2, Copy, Check } from 'lucide-react';
 import { getGameContract, formatAddress, formatEth, decodeStringFromHex } from '../thirdweb';
 import { getDisplayNameByAddress, getDisplayNameByAddressSync, preloadUsernames, preloadDisplayNames } from '../utils/userUtils';
@@ -32,6 +33,7 @@ import { validation } from '../utils/envUtils';
 import { logger, logGameAction } from '../utils/logger';
 import WinnerBadge, { TrophyBadge, CrownBadge } from './WinnerBadge';
 import ClaimedWinningsBadge, { CrossedOutPot } from './ClaimedWinningsBadge';
+import { createTransactionPoller, TransactionStatus } from '../utils/transactionMonitor';
 
 interface GameDashboardProps {
   filter?: 'active' | 'mine';
@@ -99,7 +101,9 @@ const GamesGrid = styled.div`
   }
 `;
 
-const GameCard = styled(motion.div)<{ 
+const GameCard = styled(motion.div, {
+  shouldForwardProp: (prop) => !['$isWinner', '$isCompleted', '$isUserHost'].includes(prop),
+})<{ 
   $isWinner?: boolean; 
   $isCompleted?: boolean;
   $isUserHost?: boolean;
@@ -427,21 +431,273 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
     return judges.some(judge => judge.toLowerCase() === userAddress.toLowerCase());
   };
 
-  const handleGameCreated = async (gameData: { gameCode: string; buyIn: string; maxPlayers: number }) => {
+  const handleGameCreated = async (gameData: { 
+    gameCode: string; 
+    buyIn: string; 
+    maxPlayers: number; 
+    transactionHash?: string; 
+    blockNumber?: number 
+  }) => {
     setShowCreateModal(false);
-    console.log('Game created:', gameData.gameCode);
+    console.log('🎮 Game created successfully:', {
+      gameCode: gameData.gameCode,
+      buyIn: gameData.buyIn,
+      maxPlayers: gameData.maxPlayers,
+      transactionHash: gameData.transactionHash,
+      blockNumber: gameData.blockNumber
+    });
     
-    // Automatically add the created game to the dashboard
-    try {
-      if (account?.address) {
-        console.log('🎯 Auto-adding created game to dashboard:', gameData.gameCode);
-        await addFoundGame(gameData.gameCode, account.address);
-        console.log('✅ Successfully added created game to dashboard');
-      }
-    } catch (error) {
-      console.error('❌ Failed to add created game to dashboard:', error);
-      // Don't show error to user since the game was created successfully
+    // Handle pending transactions with background monitoring
+    if (gameData.gameCode === 'PENDING' && gameData.transactionHash && account?.address) {
+      console.log('🔄 Starting background transaction monitoring for:', gameData.transactionHash);
+      
+      // Show persistent toast with transaction monitoring
+      const TransactionMonitoringToast: React.FC<{ toastId: string }> = ({ toastId }) => {
+        const [status, setStatus] = React.useState<TransactionStatus>({ status: 'pending' });
+        
+        // Start monitoring when component mounts
+        React.useEffect(() => {
+            const poller = createTransactionPoller(
+              gameData.transactionHash!,
+              account.address,
+              (newStatus) => {
+                console.log('📊 Transaction status update:', newStatus);
+                setStatus(newStatus);
+                
+                if (newStatus.status === 'complete' && newStatus.gameCode) {
+                  // Transaction completed successfully
+                  toast.dismiss(toastId);
+                  
+                  // Add completed game to dashboard
+                  addFoundGame(newStatus.gameCode, account.address)
+                    .then(() => {
+                      toast.success(
+                        `🎮 Game ${newStatus.gameCode} added to dashboard!`,
+                        { duration: 5000 }
+                      );
+                    })
+                    .catch(() => {
+                      toast.success(
+                        `🎮 Game ${newStatus.gameCode} is ready! Use "Find Game" to add it.`,
+                        { duration: 8000 }
+                      );
+                    });
+                } else if (newStatus.status === 'timeout' || newStatus.status === 'failed') {
+                  // Transaction failed or timed out
+                  toast.dismiss(toastId);
+                  
+                  toast.error(
+                    (errorT) => (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ fontWeight: '600' }}>
+                          ⏰ Transaction {newStatus.status === 'timeout' ? 'Took Too Long' : 'Failed'}
+                        </div>
+                        <div style={{ fontSize: '0.85rem', marginBottom: '8px' }}>
+                          {newStatus.error || 'Transaction monitoring exceeded 3 minutes. It may still complete - check Etherscan.'}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`https://sepolia.etherscan.io/tx/${gameData.transactionHash}`, '_blank');
+                              toast.dismiss(errorT.id);
+                            }}
+                            style={{
+                              background: 'rgba(34, 197, 94, 0.3)',
+                              border: '1px solid rgba(34, 197, 94, 0.5)',
+                              borderRadius: '6px',
+                              color: 'rgba(255, 255, 255, 0.9)',
+                              padding: '6px 12px',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem'
+                            }}
+                          >
+                            🔍 Check Transaction Status
+                          </button>
+                        </div>
+                      </div>
+                    ),
+                    { duration: 15000 }
+                  );
+                }
+              },
+              30, // Check every 30 seconds - be patient
+              180000 // Timeout after 3 minutes
+            );
+            
+            poller.start();
+            
+          return () => {
+            poller.stop();
+          };
+        }, []);
+        
+        const getStatusEmoji = () => {
+          switch (status.status) {
+            case 'pending': return '⏳';
+            case 'confirming': return '🔄';
+            case 'confirmed': return '✅';
+            case 'extracting': return '🔍';
+            case 'complete': return '🎮';
+            case 'failed': return '❌';
+            case 'timeout': return '⏰';
+            default: return '⏳';
+          }
+        };
+        
+        const getStatusText = () => {
+          switch (status.status) {
+            case 'pending': return 'Submitting transaction...';
+            case 'confirming': return 'Waiting for blockchain confirmation...';
+            case 'confirmed': return 'Transaction confirmed!';
+            case 'extracting': return 'Finding your game (this may take 1-3 minutes)...';
+            case 'complete': return `Game ${status.gameCode} ready!`;
+            case 'failed': return 'Transaction failed';
+            case 'timeout': return 'Taking longer than expected';
+            default: return 'Processing...';
+          }
+        };
+        
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.2rem' }}>{getStatusEmoji()}</span>
+              <div style={{ fontWeight: '600' }}>
+                {getStatusText()}
+              </div>
+            </div>
+            <div style={{ 
+              fontFamily: 'Monaco, monospace', 
+              fontSize: '0.9rem',
+              color: 'rgba(255, 255, 255, 0.7)',
+              marginBottom: '4px'
+            }}>
+              {gameData.transactionHash?.slice(0, 10)}...{gameData.transactionHash?.slice(-8)}
+            </div>
+            {status.blockNumber && (
+              <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)' }}>
+                Block: {status.blockNumber}
+              </div>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(`https://sepolia.etherscan.io/tx/${gameData.transactionHash}`, '_blank');
+              }}
+              style={{
+                background: 'rgba(34, 197, 94, 0.2)',
+                border: '1px solid rgba(34, 197, 94, 0.4)',
+                borderRadius: '6px',
+                color: 'rgba(255, 255, 255, 0.9)',
+                padding: '4px 8px',
+                cursor: 'pointer',
+                fontSize: '0.8rem'
+              }}
+            >
+              🔍 View Transaction
+            </button>
+          </div>
+        );
+      };
+      
+      const monitoringToast = toast(
+        (t) => <TransactionMonitoringToast toastId={t.id} />,
+        {
+          duration: Infinity, // Keep toast open until dismissed
+          style: {
+            maxWidth: '400px',
+          }
+        }
+      );
+      
+      return; // Exit early for pending transactions
     }
+    
+    // Handle completed transactions (original logic)
+    const copyGameCode = () => {
+      navigator.clipboard.writeText(gameData.gameCode)
+        .then(() => toast.success('Game code copied!'))
+        .catch(() => toast.error('Failed to copy game code'));
+    };
+    
+    const addToDashboard = async () => {
+      try {
+        if (account?.address) {
+          await addFoundGame(gameData.gameCode, account.address);
+          toast.success('Game added to dashboard!');
+        }
+      } catch (error) {
+        toast.error('Failed to add game to dashboard');
+      }
+    };
+    
+    // Custom toast with action buttons for completed games
+    toast.success(
+      (t) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+            🎮 Game Created!
+          </div>
+          <div style={{ 
+            fontFamily: 'Monaco, monospace', 
+            fontSize: '1.1rem',
+            fontWeight: '700',
+            color: '#7877C6',
+            letterSpacing: '1px',
+            marginBottom: '8px'
+          }}>
+            {gameData.gameCode}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', fontSize: '0.85rem' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                copyGameCode();
+              }}
+              style={{
+                background: 'rgba(120, 119, 198, 0.2)',
+                border: '1px solid rgba(120, 119, 198, 0.4)',
+                borderRadius: '6px',
+                color: 'rgba(255, 255, 255, 0.9)',
+                padding: '4px 8px',
+                cursor: 'pointer',
+                fontSize: '0.8rem'
+              }}
+            >
+              📋 Copy Code
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/game/${gameData.gameCode}`);
+                toast.dismiss(t.id);
+              }}
+              style={{
+                background: 'rgba(34, 197, 94, 0.2)',
+                border: '1px solid rgba(34, 197, 94, 0.4)',
+                borderRadius: '6px',
+                color: 'rgba(255, 255, 255, 0.9)',
+                padding: '4px 8px',
+                cursor: 'pointer',
+                fontSize: '0.8rem'
+              }}
+            >
+              🔗 Open Game
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        duration: 8000,
+        style: {
+          maxWidth: '320px',
+        }
+      }
+    );
+    
+    // Note: Game auto-add is now handled by background transaction monitoring
+    // The TransactionMonitoringToast (above) automatically adds completed games
+    // No need for duplicate auto-add logic here since all new games use PENDING flow
   };
 
   const handleGameJoined = (gameData?: { gameCode: string; buyIn: string; maxPlayers: number }) => {

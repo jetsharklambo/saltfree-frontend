@@ -167,10 +167,18 @@ const PrizeSplitsModal: React.FC<PrizeSplitsModalProps> = ({
   const contract = getGameContract();
 
   const handleSplitChange = (index: number, value: string) => {
+    // Handle empty input
+    if (value === '') {
+      const newSplits = [...splits];
+      newSplits[index] = 0;
+      setSplits(newSplits);
+      return;
+    }
+
     const numericValue = parseFloat(value) * 10; // Convert percentage to basis points
     
     // Safety checks for invalid values
-    if (isNaN(numericValue) || numericValue < 0 || numericValue > 999) return;
+    if (isNaN(numericValue) || numericValue < 0 || numericValue > 1000) return;
     if (index < 0 || index >= splits.length) return;
 
     const newSplits = [...splits];
@@ -309,12 +317,12 @@ const PrizeSplitsModal: React.FC<PrizeSplitsModalProps> = ({
                 </PlaceIcon>
                 <SplitInput
                   type="number"
-                  step="0.1"
-                  min="0.1"
-                  max="99.9"
-                  value={split > 0 ? (split / 10).toFixed(1) : "0.1"}
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={split > 0 ? Math.round(split / 10).toString() : ""}
                   onChange={(e) => handleSplitChange(index, e.target.value)}
-                  placeholder="0.1"
+                  placeholder="0"
                 />
                 <PercentLabel>%</PercentLabel>
                 <GlassButton

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useActiveAccount } from "thirdweb/react";
+import toast from 'react-hot-toast';
 import { X, Search, Users, ExternalLink } from 'lucide-react';
 import { useGameData } from '../contexts/GameDataContext';
 import { 
@@ -12,6 +13,7 @@ import styled from '@emotion/styled';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatEth, formatAddress } from '../thirdweb';
 import { getDisplayNameByAddressSync } from '../utils/userUtils';
+import { normalizeGameCode, extractGameCode } from '../utils/gameCodeUtils';
 import { useUser } from '../contexts/UserContext';
 
 interface FindGameModalProps {
@@ -154,14 +156,52 @@ const FindGameModal: React.FC<FindGameModalProps> = ({ onClose, onSuccess }) => 
       setGameFound(false);
       setFoundGame(null);
 
-      const gameData = await addFoundGame(gameCode.trim().toUpperCase(), account.address);
+      // Extract and normalize game code with fuzzy matching
+      const extractedCode = extractGameCode(gameCode.trim());
+      if (!extractedCode) {
+        setError('Invalid game code format');
+        return;
+      }
+
+      const codeVariations = normalizeGameCode(extractedCode);
+      console.log('🔍 FindGameModal trying code variations:', codeVariations);
+
+      // Try each variation until one works
+      let gameData = null;
+      let lastError = null;
+
+      for (const variation of codeVariations) {
+        try {
+          gameData = await addFoundGame(variation, account.address);
+          console.log('✅ Found game with code variation:', variation);
+          break;
+        } catch (err) {
+          console.log('❌ Game not found with variation:', variation);
+          lastError = err;
+        }
+      }
+
+      if (!gameData) {
+        throw lastError || new Error('Game not found with any variation');
+      }
       
       setFoundGame(gameData);
       setGameFound(true);
       
+      // Show success toast
+      toast.success(`Game ${gameData.code} found and added to dashboard!`, {
+        duration: 3000
+      });
+      
     } catch (err: any) {
       console.error('Failed to find game:', err);
-      setError(err.message || 'Failed to find game');
+      const errorMessage = err.message || 'Failed to find game';
+      setError(errorMessage);
+      
+      // Show error toast
+      toast.error(errorMessage, {
+        duration: 4000
+      });
     } finally {
       setLoading(false);
     }

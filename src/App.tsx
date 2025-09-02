@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { ThirdwebProvider, ConnectButton } from 'thirdweb/react';
+import { Toaster } from 'react-hot-toast';
 import { client, chain } from './thirdweb';
 import GameDashboard from './components/GameDashboard';
 import GameDetailPage from './pages/GameDetailPage';
@@ -187,6 +188,40 @@ function App() {
                     <Route path="/join/:gameCode" element={<GameDetailPage autoJoin={true} />} />
                   </Routes>
                 </MainContent>
+                
+                {/* Toast notifications */}
+                <Toaster
+                  position="bottom-right"
+                  reverseOrder={false}
+                  gutter={8}
+                  toastOptions={{
+                    duration: 4000,
+                    style: {
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      backdropFilter: 'blur(16px)',
+                      WebkitBackdropFilter: 'blur(16px)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '12px',
+                      color: 'rgba(255, 255, 255, 0.9)',
+                      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                      fontSize: '0.9rem',
+                      maxWidth: '400px',
+                      padding: '16px',
+                    },
+                    success: {
+                      iconTheme: {
+                        primary: '#22c55e',
+                        secondary: 'rgba(255, 255, 255, 0.9)',
+                      },
+                    },
+                    error: {
+                      iconTheme: {
+                        primary: '#ef4444',
+                        secondary: 'rgba(255, 255, 255, 0.9)',
+                      },
+                    },
+                  }}
+                />
               </AppContainer>
               </GameDataProvider>
             </UserProvider>

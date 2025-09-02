@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveAccount } from "thirdweb/react";
 import { prepareContractCall, sendTransaction, waitForReceipt, readContract } from 'thirdweb';
+import toast from 'react-hot-toast';
 import { X, Users, Coins, Clock, Crown, Trophy, AlertCircle, Scale, Lock, Unlock, Copy, Share2, ExternalLink, Check } from 'lucide-react';
 import { getGameContract, formatAddress, formatEth, decodeStringFromHex, formatPrizeSplit } from '../thirdweb';
 import { logBuyInInfo, formatBuyInForDisplay } from '../utils/buyInUtils';
@@ -650,16 +651,27 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       try {
         console.log(`🔍 Loading display names for ${addressesToResolve.length} addresses`);
         
-        // Pre-load display names (usernames + ENS) for faster sync access
-        await preloadDisplayNames(addressesToResolve);
+        // Add timeout to prevent hanging
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Display names loading timeout')), 8000)
+        );
         
-        // Get display names with ENS resolution
-        const nameMap = await getDisplayNamesByAddresses(addressesToResolve);
+        const loadingPromise = (async () => {
+          // Pre-load display names (usernames + ENS) for faster sync access
+          await preloadDisplayNames(addressesToResolve);
+          
+          // Get display names with ENS resolution
+          const nameMap = await getDisplayNamesByAddresses(addressesToResolve);
+          
+          setDisplayNames(nameMap);
+          console.log(`✅ Loaded ${nameMap.size} display names:`, Object.fromEntries(nameMap));
+        })();
         
-        setDisplayNames(nameMap);
-        console.log(`✅ Loaded ${nameMap.size} display names:`, Object.fromEntries(nameMap));
+        await Promise.race([loadingPromise, timeoutPromise]);
+        
       } catch (error) {
-        console.warn('Failed to load display names:', error);
+        console.warn('Failed to load display names (non-critical):', error);
+        // Don't throw - this is now non-blocking
       }
     }
   };
@@ -932,13 +944,18 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         playersData: updatedGame.players
       });
       
-      // Load display names for all addresses
-      await loadDisplayNames(updatedGame);
+      // Set loading to false immediately so modal can render
+      setLoading(false);
+      
+      // Load display names asynchronously without blocking modal render
+      loadDisplayNames(updatedGame).catch(error => {
+        console.warn('Display names loading failed (non-blocking):', error);
+        // Don't set error state - this is non-critical
+      });
 
     } catch (err: any) {
       console.error('Failed to load game details:', err);
       setError('Failed to load game details. The game may no longer exist.');
-    } finally {
       setLoading(false);
     }
   };
@@ -1014,6 +1031,13 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         });
 
         console.log('Successfully joined game!');
+        
+        // Show success toast
+        toast.success(`Successfully joined game ${game.code}!`, {
+          duration: 3000,
+          icon: '🎮'
+        });
+        
         await loadGameDetails();
         onRefresh();
       };
@@ -1241,11 +1265,16 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
     try {
       await navigator.clipboard.writeText(game.code);
       setIsCodeCopied(true);
+      toast.success('Game code copied!', {
+        duration: 2000,
+        icon: '📋'
+      });
       setTimeout(() => {
         setIsCodeCopied(false);
       }, 1500);
     } catch (err) {
       console.error('Failed to copy game code:', err);
+      toast.error('Failed to copy game code');
     }
   };
 
@@ -1254,11 +1283,16 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
     try {
       await navigator.clipboard.writeText(shareUrl);
       setIsShareCopied(true);
+      toast.success('Game link copied!', {
+        duration: 2000,
+        icon: '🔗'
+      });
       setTimeout(() => {
         setIsShareCopied(false);
       }, 1500);
     } catch (err) {
       console.error('Failed to copy game URL:', err);
+      toast.error('Failed to copy game link');
       alert(`Game URL: ${shareUrl}`);
     }
   };

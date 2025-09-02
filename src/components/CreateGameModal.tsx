@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useActiveAccount } from "thirdweb/react";
 import { prepareContractCall, sendTransaction, waitForReceipt, getContractEvents } from 'thirdweb';
+import toast from 'react-hot-toast';
 import { X, Plus, Shield, Trash2 } from 'lucide-react';
 import { getGameContract, decodeStringFromHex, client, chain, CONTRACT_ADDRESS } from '../thirdweb';
 import { resolveToWalletAddress, formatResolvedAddress, ResolvedAddress } from '../utils/addressResolver';
+import { pollForNewGame } from '../utils/gamePolling';
 import { GlassModal, GlassModalContent, GlassButton, GlassInput, GlassSelect, FlexContainer, LoadingSpinner } from '../styles/glass';
 import styled from '@emotion/styled';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -12,6 +14,7 @@ interface CreateGameModalProps {
   onClose: () => void;
   onSuccess: (gameData: { gameCode: string; buyIn: string; maxPlayers: number; transactionHash?: string; blockNumber?: number }) => void;
 }
+
 
 const ModalHeader = styled.div`
   display: flex;
@@ -189,6 +192,79 @@ const RemoveJudgeButton = styled.button`
   }
 `;
 
+const DecisionTypeSection = styled.div`
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+`;
+
+const DecisionTypeTitle = styled.h3`
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  color: rgba(255, 255, 255, 0.9);
+`;
+
+const RadioGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const RadioOption = styled.label<{ $selected: boolean }>`
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: ${({ $selected }) => 
+    $selected ? 'rgba(102, 126, 234, 0.15)' : 'rgba(255, 255, 255, 0.02)'};
+  border: 1px solid ${({ $selected }) => 
+    $selected ? 'rgba(102, 126, 234, 0.4)' : 'rgba(255, 255, 255, 0.1)'};
+  
+  &:hover {
+    background: ${({ $selected }) => 
+      $selected ? 'rgba(102, 126, 234, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
+    border-color: ${({ $selected }) => 
+      $selected ? 'rgba(102, 126, 234, 0.5)' : 'rgba(255, 255, 255, 0.2)'};
+  }
+`;
+
+const RadioInput = styled.input`
+  margin: 0;
+  margin-top: 0.125rem;
+`;
+
+const RadioContent = styled.div`
+  flex: 1;
+`;
+
+const RadioTitle = styled.div`
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 0.25rem;
+`;
+
+const RadioDescription = styled.div`
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+`;
+
+const MajorityIndicator = styled.div`
+  background: rgba(102, 126, 234, 0.15);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: rgba(102, 126, 234, 1);
+  font-weight: 600;
+  margin-top: 0.5rem;
+`;
 
 const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess }) => {
   const account = useActiveAccount();
@@ -202,29 +278,48 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
   const [error, setError] = useState('');
   const [createdGameCode, setCreatedGameCode] = useState<string>('');
   
+  // Decision type state
+  const [decisionType, setDecisionType] = useState<'player_vote' | 'judge'>('player_vote');
+  
   // Judges state
   const [judgeInput, setJudgeInput] = useState('');
   const [resolving, setResolving] = useState(false);
   const [resolvedAddress, setResolvedAddress] = useState<ResolvedAddress | null>(null);
   const [judges, setJudges] = useState<ResolvedAddress[]>([]);
+  const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
 
   const contract = getGameContract();
 
-  // Handle judges input change with address resolution
-  const handleJudgeInputChange = async (value: string) => {
+  // Helper function to calculate majority needed for player voting
+  const calculateMajority = (totalPlayers: number): number => {
+    return Math.floor(totalPlayers / 2) + 1;
+  };
+
+  // Handle judges input change with debounced address resolution
+  const handleJudgeInputChange = (value: string) => {
     setJudgeInput(value);
     setResolvedAddress(null);
     
+    // Clear existing timer
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    
+    // Set new timer to resolve after 1.5 seconds of no typing
     if (value.trim().length > 2) {
-      setResolving(true);
-      try {
-        const resolved = await resolveToWalletAddress(value.trim());
-        setResolvedAddress(resolved);
-      } catch (error) {
-        console.error('Judge resolution error:', error);
-      } finally {
-        setResolving(false);
-      }
+      const timer = setTimeout(async () => {
+        setResolving(true);
+        try {
+          const resolved = await resolveToWalletAddress(value.trim());
+          setResolvedAddress(resolved);
+        } catch (error) {
+          console.error('Judge resolution error:', error);
+        } finally {
+          setResolving(false);
+        }
+      }, 1500); // Wait 1.5 seconds after typing stops
+      
+      setDebounceTimer(timer);
     }
   };
 
@@ -289,8 +384,10 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
       });
 
       const buyInWei = BigInt(Math.floor(parseFloat(formData.buyIn) * 1e18));
-      const judgeAddresses = judges.map(judge => judge.address);
+      // Use judges only when decision type is 'judge', otherwise empty array for player voting
+      const judgeAddresses = decisionType === 'judge' ? judges.map(judge => judge.address) : [];
       console.log('Buy-in in wei:', buyInWei.toString());
+      console.log('Decision type:', decisionType);
       console.log('Judge addresses:', judgeAddresses);
 
       try {
@@ -308,201 +405,21 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
         });
 
         console.log('Game transaction submitted! Hash:', transactionHash);
-        setTransactionHash(transactionHash);
-        setTransactionState('waiting');
         
-        const receiptPromise = waitForReceipt({
-          client: client,
-          chain: chain,
-          transactionHash: transactionHash,
-        });
-        
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Transaction confirmation timed out after 60 seconds')), 60000)
-        );
-        
-        const receipt = await Promise.race([receiptPromise, timeoutPromise]) as any;
-
-        console.log('Transaction confirmed! Extracting game code...');
-        setTransactionState('extracting');
-        
-        console.log('📊 Full transaction receipt:', receipt);
-        console.log('📊 Receipt logs count:', receipt.logs?.length || 0);
-        
-        let gameCode = 'UNKNOWN';
-        
-        const GAME_STARTED_TOPIC = '0xc83727715d9b58d35c2b5aa93e8e9144b9f66c103994a03bbafa82b473c142b2';
-        
-        if (receipt.logs && receipt.logs.length > 0) {
-          console.log('🔍 Analyzing transaction logs...');
-          
-          for (let i = 0; i < receipt.logs.length; i++) {
-            const log = receipt.logs[i];
-            console.log(`📋 Log ${i}:`, {
-              address: log.address,
-              topics: log.topics,
-              data: log.data,
-              dataLength: log.data?.length
-            });
-            
-            if (log.topics && log.topics[0] && log.topics[0].toLowerCase() === GAME_STARTED_TOPIC.toLowerCase()) {
-              console.log('🎯 Found GameStarted event! Extracting game code...');
-              
-              if (log.data) {
-                console.log('🔍 Comprehensive hex data analysis:');
-                const dataHex = log.data.slice(2);
-                console.log('- Raw hex (no 0x):', dataHex);
-                console.log('- Hex length:', dataHex.length);
-                console.log('- Hex bytes:', dataHex.length / 2);
-                
-                for (let chunk = 0; chunk < dataHex.length; chunk += 64) {
-                  const chunkData = dataHex.slice(chunk, chunk + 64);
-                  console.log(`- Chunk ${chunk/64}: ${chunkData} (${chunkData.length} chars)`);
-                  
-                  try {
-                    const asNumber = parseInt(chunkData, 16);
-                    console.log(`  As number: ${asNumber}`);
-                  } catch (e) {}
-                  
-                  try {
-                    let asciiStr = '';
-                    for (let i = 0; i < chunkData.length; i += 2) {
-                      const byte = parseInt(chunkData.substr(i, 2), 16);
-                      if (byte > 0 && byte < 127) {
-                        asciiStr += String.fromCharCode(byte);
-                      } else if (byte === 0) {
-                        break;
-                      }
-                    }
-                    if (asciiStr.length > 0) {
-                      console.log(`  As ASCII: "${asciiStr}"`);
-                    }
-                  } catch (e) {}
-                }
-                
-                try {
-                  const extractedCode = decodeStringFromHex(log.data);
-                  console.log('🎯 decodeStringFromHex result:', `"${extractedCode}" (length: ${extractedCode?.length || 0})`);
-                  
-                  if (extractedCode && extractedCode.length >= 3 && extractedCode.length <= 10) {
-                    gameCode = extractedCode;
-                    console.log('✅ Extracted game code from GameStarted event:', gameCode);
-                    break;
-                  } else {
-                    console.log('⚠️ Decoded string but invalid length:', extractedCode);
-                    
-                    console.log('🔄 Trying alternative parsing methods...');
-                    
-                    for (let pos = 64; pos < dataHex.length; pos += 64) {
-                      const stringLengthHex = dataHex.slice(pos, pos + 64);
-                      const stringLength = parseInt(stringLengthHex, 16);
-                      console.log(`Position ${pos/64}: Length = ${stringLength}`);
-                      
-                      if (stringLength > 0 && stringLength <= 20) {
-                        const stringStart = pos + 64;
-                        const stringHex = dataHex.slice(stringStart, stringStart + stringLength * 2);
-                        
-                        let parsedString = '';
-                        for (let i = 0; i < stringHex.length; i += 2) {
-                          const byte = parseInt(stringHex.substr(i, 2), 16);
-                          if (byte > 0) {
-                            parsedString += String.fromCharCode(byte);
-                          }
-                        }
-                        
-                        console.log(`Parsed string at position ${pos/64}: "${parsedString}"`);
-                        
-                        if (parsedString.length >= 3 && parsedString.length <= 10 && /^[A-Z0-9-]+$/i.test(parsedString)) {
-                          gameCode = parsedString;
-                          console.log('✅ Found valid game code with alternative parsing:', gameCode);
-                          break;
-                        }
-                      }
-                    }
-                  }
-                } catch (err) {
-                  console.log('❌ Failed to decode GameStarted event data:', err);
-                }
-              }
-            }
-          }
-        }
-        
-        if (gameCode === 'UNKNOWN' && receipt.logs && receipt.logs.length > 0) {
-          console.log('🔄 Fallback: Trying to decode from any log data...');
-          
-          for (let i = 0; i < receipt.logs.length; i++) {
-            const log = receipt.logs[i];
-            if (log.data && log.data.length > 2) {
-              try {
-                const extractedCode = decodeStringFromHex(log.data);
-                if (extractedCode && extractedCode.length >= 3 && extractedCode.length <= 10 && /^[A-Z0-9-]+$/i.test(extractedCode)) {
-                  gameCode = extractedCode;
-                  console.log(`✅ Extracted game code from log ${i} (fallback):`, gameCode);
-                  break;
-                }
-              } catch (err) {
-                console.log(`Failed to decode log ${i} data`);
-              }
-            }
-          }
-        }
-        
-        if (gameCode === 'UNKNOWN' && receipt.returnData) {
-          console.log('🔄 Trying to extract from return data...');
-          try {
-            const returnedCode = decodeStringFromHex(receipt.returnData);
-            if (returnedCode && returnedCode.length >= 3 && returnedCode.length <= 10) {
-              gameCode = returnedCode;
-              console.log('✅ Extracted game code from return data:', gameCode);
-            }
-          } catch (err) {
-            console.log('Failed to decode from return data');
-          }
-        }
-        
-        if (gameCode === 'UNKNOWN' && receipt.blockNumber) {
-          console.log('🔄 Trying thirdweb event parsing...');
-          try {
-            const events = await getContractEvents({
-              contract,
-              eventName: "GameStarted",
-              fromBlock: receipt.blockNumber,
-              toBlock: receipt.blockNumber,
-            });
-            
-            console.log('🎯 Found GameStarted events via thirdweb:', events.length);
-            
-            for (const event of events) {
-              if (event.transactionHash === transactionHash) {
-                console.log('✅ Found matching GameStarted event:', event);
-                if (event.args && event.args.code) {
-                  gameCode = event.args.code;
-                  console.log('✅ Extracted game code from thirdweb event:', gameCode);
-                  break;
-                }
-              }
-            }
-          } catch (err) {
-            console.log('❌ Failed to get events via thirdweb:', err);
-          }
-        }
-        
-        console.log('Game created with code:', gameCode);
-        
-        if (gameCode === 'UNKNOWN') {
-          console.warn('Could not extract game code from transaction - using fallback');
-          gameCode = `GAME-${transactionHash.slice(-6).toUpperCase()}`;
-        }
-        
+        // Close modal immediately and let background monitoring handle the rest
         onSuccess({ 
-          gameCode: gameCode, 
+          gameCode: 'PENDING', // Special code to indicate pending status
           buyIn: formData.buyIn, 
           maxPlayers: formData.maxPlayers,
           transactionHash: transactionHash,
-          blockNumber: receipt.blockNumber
+          blockNumber: 0 // Will be set when transaction confirms
         });
+        
+        // Exit early - background monitoring will handle completion
         return;
+
+        // This code has been moved to background monitoring
+        // The modal closes immediately after transaction submission
       } catch (apiError: any) {
         console.error('Transaction error:', apiError);
         
@@ -540,6 +457,14 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
       }
       
       setError(errorMessage);
+      
+      // Also show toast notification for immediate feedback
+      toast.error(errorMessage, {
+        duration: 5000,
+        style: {
+          maxWidth: '400px'
+        }
+      });
     } finally {
       setCreating(false);
       setTransactionState('idle');
@@ -613,14 +538,57 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             </GlassSelect>
           </FormGroup>
 
+          <DecisionTypeSection>
+            <DecisionTypeTitle>Winner Decision Method</DecisionTypeTitle>
+            <RadioGroup>
+              <RadioOption $selected={decisionType === 'player_vote'}>
+                <RadioInput
+                  type="radio"
+                  name="decisionType"
+                  value="player_vote"
+                  checked={decisionType === 'player_vote'}
+                  onChange={(e) => setDecisionType(e.target.value as 'player_vote' | 'judge')}
+                />
+                <RadioContent>
+                  <RadioTitle>Player Vote</RadioTitle>
+                  <RadioDescription>
+                    Players vote to determine winners. Majority vote required.
+                  </RadioDescription>
+                  {decisionType === 'player_vote' && (
+                    <MajorityIndicator>
+                      {calculateMajority(formData.maxPlayers)} out of {formData.maxPlayers} players needed for majority
+                    </MajorityIndicator>
+                  )}
+                </RadioContent>
+              </RadioOption>
+              
+              <RadioOption $selected={decisionType === 'judge'}>
+                <RadioInput
+                  type="radio"
+                  name="decisionType"
+                  value="judge"
+                  checked={decisionType === 'judge'}
+                  onChange={(e) => setDecisionType(e.target.value as 'player_vote' | 'judge')}
+                />
+                <RadioContent>
+                  <RadioTitle>Judge Decision</RadioTitle>
+                  <RadioDescription>
+                    Designated judges determine winners. Judges vote for free and can override player preferences.
+                  </RadioDescription>
+                </RadioContent>
+              </RadioOption>
+            </RadioGroup>
+          </DecisionTypeSection>
+
+          {decisionType === 'judge' && (
           <JudgesSection>
             <JudgesSectionTitle>
               <Shield size={16} />
-              Judges (Optional)
+              Judges
             </JudgesSectionTitle>
             
             <InfoBox variant="info" style={{ marginBottom: '1rem' }}>
-              Judges vote for free and can override player votes. Leave empty for player-only voting.
+              Add trusted judges who will determine the winners. Judges vote for free and their decisions are final.
             </InfoBox>
             
             <JudgeInputRow>
@@ -700,6 +668,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
               </div>
             )}
           </JudgesSection>
+          )}
 
           {error && (
             <InfoBox variant="error">
