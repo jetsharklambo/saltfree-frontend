@@ -314,9 +314,8 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
   const [joinAsJudge, setJoinAsJudge] = useState(false);
   const [isShareDashboardCopied, setIsShareDashboardCopied] = useState(false);
   const [unanimousJudgesCache, setUnanimousJudgesCache] = useState<Map<string, string[]>>(new Map());
-  const [gameFilter, setGameFilter] = useState<'all' | 'locked' | 'unlocked'>('all');
 
-  // Filter games based on lock status
+  // Filter games based on URL filter only
   const filteredGames = games.filter(game => {
     // Apply URL-based filter first
     if (filter === 'active') {
@@ -330,10 +329,7 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
              game.players?.some(p => p?.toLowerCase() === userAddress);
     }
     
-    // Apply local gameFilter (from filter buttons)
-    if (gameFilter === 'locked') return game.isLocked;
-    if (gameFilter === 'unlocked') return !game.isLocked;
-    return true; // 'all'
+    return true; // Show all games by default
   });
 
   // Debug: log games state changes and fetch judges for new games
@@ -396,10 +392,11 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
       setTimeout(() => {
         setIsShareDashboardCopied(false);
       }, 1500);
+      
+      toast.success('Dashboard link copied!');
     } catch (err) {
       console.error('Failed to copy dashboard URL:', err);
-      // Fallback: show URL in an alert
-      alert(`Dashboard URL: ${shareUrl}`);
+      toast.error('Failed to copy dashboard link');
     }
   };
 
@@ -548,7 +545,7 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
         const getStatusText = () => {
           switch (status.status) {
             case 'pending': return 'Submitting transaction...';
-            case 'confirming': return 'Waiting for blockchain confirmation...';
+            case 'confirming': return 'Waiting for confirmation...';
             case 'confirmed': return 'Transaction confirmed!';
             case 'extracting': return 'Finding your game (this may take 1-3 minutes)...';
             case 'complete': return `Game ${status.gameCode} ready!`;
@@ -711,9 +708,9 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
     return (
       <DashboardContainer>
         <WelcomeSection>
-          <SectionTitle>Welcome to Pony Up! 🐎</SectionTitle>
+          <SectionTitle>Welcome to SaltFree! 🧂</SectionTitle>
           <p style={{ fontSize: '1.1rem', marginBottom: '2rem', color: 'rgba(255, 255, 255, 0.8)' }}>
-            Connect your wallet to start playing poker games on the blockchain.
+            Connect your wallet for salt-free gaming and payouts.
           </p>
           <div className="emoji">
             🎲🃏♠️♥️
@@ -726,11 +723,11 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
 
   // Create meta data for current dashboard view
   const shareUrl = window.location.origin + window.location.pathname;
-  const shareTitle = filter === 'active' ? 'Active Games on Pony Up!' 
-    : filter === 'mine' ? 'My Games on Pony Up!'
-    : view === 'leaderboard' ? 'Pony Up! Leaderboard'
-    : 'Pony Up! - Blockchain Poker Games';
-  const shareDescription = 'Join poker games on the blockchain. Connect your wallet and start playing!';
+  const shareTitle = filter === 'active' ? 'Active Games on SaltFree!' 
+    : filter === 'mine' ? 'My Salt-Free Games'
+    : view === 'leaderboard' ? 'SaltFree Leaderboard'
+    : 'SaltFree - Salt-Free Gaming & Payouts';
+  const shareDescription = 'Play games, win money, zero salt. The degen way to settle bets.';
 
   return (
     <>
@@ -741,11 +738,11 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
         <meta property="og:description" content={shareDescription} />
         <meta property="og:url" content={shareUrl} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content={`${window.location.origin}/pony-up-social.png`} />
+        <meta property="og:image" content={`${window.location.origin}/saltfree-social.png`} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={shareTitle} />
         <meta name="twitter:description" content={shareDescription} />
-        <meta name="twitter:image" content={`${window.location.origin}/pony-up-social.png`} />
+        <meta name="twitter:image" content={`${window.location.origin}/saltfree-social.png`} />
       </Helmet>
       <DashboardContainer>
       {/* Welcome Section */}
@@ -829,57 +826,21 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
       <SectionHeader>
         <SectionTitle>My Games ({games.length})</SectionTitle>
         <p style={{ fontSize: '0.95rem', color: 'rgba(255, 255, 255, 0.6)', margin: '0 0 1rem 0' }}>
-          {loading ? 'Loading your games from blockchain...' : 'Games you\'ve created or joined (click "Load My Games" to refresh)'}
+          {loading ? 'Loading your games...' : 'Games you\'ve created or joined (click "Load My Games" to refresh)'}
         </p>
         
-        {/* Filter Controls */}
+        {/* Share Games Button */}
         <FlexContainer justify="center" gap="0.5rem" style={{ marginBottom: '1rem' }}>
-          <GlassButton
-            variant={gameFilter === 'all' ? 'primary' : 'secondary'}
-            onClick={() => setGameFilter('all')}
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              background: gameFilter === 'all' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)'
-            }}
-          >
-            All ({games.length})
-          </GlassButton>
-          <GlassButton
-            variant={gameFilter === 'unlocked' ? 'primary' : 'secondary'}
-            onClick={() => setGameFilter('unlocked')}
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              background: gameFilter === 'unlocked' ? '#22c55e' : 'rgba(255, 255, 255, 0.05)'
-            }}
-          >
-            Open ({games.filter(g => !g.isLocked).length})
-          </GlassButton>
-          <GlassButton
-            variant={gameFilter === 'locked' ? 'primary' : 'secondary'}
-            onClick={() => setGameFilter('locked')}
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              background: gameFilter === 'locked' ? '#ef4444' : 'rgba(255, 255, 255, 0.05)'
-            }}
-          >
-            Locked ({games.filter(g => g.isLocked).length})
-          </GlassButton>
-          
-          {/* Share Games Button */}
           <GlassButton
             variant="secondary"
             onClick={handleShareDashboard}
-            disabled={filteredGames.length === 0}
+            disabled={games.length === 0}
             style={{
               padding: '0.5rem 1rem',
               fontSize: '0.875rem',
-              background: isShareDashboardCopied ? glassTheme.success : 'rgba(255, 255, 255, 0.05)',
-              marginLeft: '1rem'
+              background: isShareDashboardCopied ? glassTheme.success : 'rgba(255, 255, 255, 0.05)'
             }}
-            title={`Share top ${Math.min(5, filteredGames.length)} games`}
+            title={`Share top ${Math.min(5, games.length)} games`}
           >
             {isShareDashboardCopied ? (
               <>
@@ -1078,17 +1039,10 @@ const ModernGameCard: React.FC<{
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(gameCode);
-      // Simple visual feedback
-      const element = e.currentTarget as HTMLElement;
-      const originalText = element.innerHTML;
-      element.innerHTML = '✓ Copied!';
-      element.style.color = glassTheme.success;
-      setTimeout(() => {
-        element.innerHTML = originalText;
-        element.style.color = '';
-      }, 1500);
+      toast.success('Game code copied!');
     } catch (err) {
       console.error('Failed to copy game code:', err);
+      toast.error('Failed to copy game code');
     }
   };
 
@@ -1111,10 +1065,11 @@ const ModernGameCard: React.FC<{
       setTimeout(() => {
         setIsShareCopied(false);
       }, 1500);
+      
+      toast.success('Game link copied!');
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
-      // Fallback: show URL in an alert
-      alert(`Game URL: ${shareUrl}`);
+      toast.error('Failed to copy game link');
     }
   };
 
@@ -1167,36 +1122,6 @@ const ModernGameCard: React.FC<{
               />
             )}
           </FlexContainer>
-          <GameStats>
-            <FlexContainer align="center" gap="0.25rem">
-              <Users size={16} />
-              {game.playerCount || 0}/{game.maxPlayers || 0}
-            </FlexContainer>
-            {isCompleted && winningsClaimed ? (
-              <CrossedOutPot 
-                originalAmount={formatEth(game.buyIn || '0')}
-              />
-            ) : (
-              <span>💰 {formatEth(game.buyIn || '0')} ETH</span>
-            )}
-            {game.isLocked && (
-              <FlexContainer align="center" gap="0.25rem" style={{ color: '#ff6b6b' }}>
-                <Lock size={16} />
-                Locked
-              </FlexContainer>
-            )}
-            {game.prizeSplits && game.prizeSplits.length > 0 ? (
-              <FlexContainer align="center" gap="0.25rem" style={{ color: '#7877c6', fontSize: '0.75rem' }} title={`Prize splits: ${game.prizeSplits.map((split, idx) => `${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}${(split / 10).toFixed(1)}%`).join(' ')}`}>
-                <Trophy size={14} />
-                Custom Prizes
-              </FlexContainer>
-            ) : (
-              <FlexContainer align="center" gap="0.25rem" style={{ color: '#ffd700', fontSize: '0.75rem' }} title="Winner takes all prize money">
-                🏆
-                Winner Take All
-              </FlexContainer>
-            )}
-          </GameStats>
         </div>
         
         <FlexContainer direction="column" align="flex-end" gap="0.5rem">
@@ -1254,19 +1179,6 @@ const ModernGameCard: React.FC<{
           )}
         </FlexContainer>
       </GameHeader>
-      
-      <FlexContainer justify="space-between" align="center">
-        <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>
-          Host: {getDisplayNameByAddressSync(game.host || '')}
-        </div>
-        
-        {game.autoLockTime && game.autoLockTime > 0 && !game.isLocked && (
-          <FlexContainer align="center" gap="0.25rem" style={{ fontSize: '0.8rem', color: '#ff6b6b' }}>
-            <Clock size={14} />
-            Auto-lock
-          </FlexContainer>
-        )}
-      </FlexContainer>
     </GameCard>
   );
 };

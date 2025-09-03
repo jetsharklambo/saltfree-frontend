@@ -1,138 +1,109 @@
-# 🧑‍⚖️ Consensus Mechanisms - How We Settle Shit Like Adults
+# 🧂 SaltFree Consensus - How We Settle Games Like Adults
 
-> *A guide to not being a dick when your friends win (or lose)*
+> *A guide to keeping it salt-free when your friends win (or lose)*
 
-## 🤔 What The Hell Is Consensus?
+## 🤔 What Is Consensus?
 
-Consensus is how we figure out who actually won your degen games without everyone getting in a fight. Since you're all biased idiots who can't be trusted to vote fairly, PU2 has multiple ways to handle this shit.
+Consensus is how we figure out who actually won your degen games without everyone getting salty. Since you're all biased players who might vote unfairly, SaltFree has clean ways to handle winner determination.
 
-## 🗳️ The Three Ways To Decide Winners
+## 🗳️ The Two Ways To Decide Winners
 
-### 1. **Democracy Mode** (Everyone Gets A Say)
-*The classic "let's all vote and hope nobody lies" approach*
+### 1. **Player Vote** (Democracy Mode) - DEFAULT
+*The classic "let's all vote and keep it civil" approach*
 
 **How it works:**
 - Every player votes on who won
-- Need majority agreement to confirm winners
-- If you can't agree, funds stay locked forever (don't be that group)
+- Need majority agreement to confirm winners (e.g., 3 out of 4 players)
+- Shows real-time majority calculation during game creation
+- If you can't agree, funds stay locked (don't be that group)
 
 **Perfect for:**
-- Groups that trust each other (rare)
+- Groups that trust each other
 - Games with obvious outcomes
-- When nobody wants to be the authoritarian asshole
+- Low-stakes casual games
+- When everyone agrees to vote fairly
 
 **Pros:**
 - Democratic and fair (theoretically)
 - Everyone has input
 - No single point of failure
+- Default option - no setup required
 
 **Cons:**
-- Your friends are liars
-- Can deadlock if people are petty
-- Slow when everyone argues
+- Can deadlock if people get salty
+- Slower resolution when everyone argues
+- Requires honest voting
 
-### 2. **Judge Mode** (Benevolent Dictatorship)
-*"I appoint thee to tell us who's less shit"*
+### 2. **Judge Decision** (Authority Mode)
+*"Let the neutral party keep it salt-free"*
 
 **How it works:**
-- Host appoints one or more judges before/during game
-- Judges don't play, just watch and decide
-- Judge's word is fucking FINAL (no appeals, no crying)
+- Host adds trusted judges during game creation
+- Enter judges by username, ENS name, or wallet address
+- Judges don't pay to play, just watch and decide
+- Judge decisions are FINAL (no appeals, no salt)
 - Decision gets recorded on-chain permanently
 
 **Perfect for:**
 - High-stakes games where emotions run high
 - Tournament-style competitions  
-- When your friends are too drunk to vote rationally
-- Any situation requiring an adult in the room
+- When you need neutral arbitration
+- Any situation requiring adult supervision
 
 **Pros:**
-- Fast resolution (one person decides)
-- Neutral arbitration (judges don't have skin in the game)
+- Fast resolution (judges decide quickly)
+- Neutral arbitration (judges have no skin in the game)
 - No deadlocks or arguments
 - Professional tournament feel
 
 **Cons:**
-- Need to find someone trustworthy (good luck)
+- Need to find trustworthy judges
 - Centralized decision making
-- Judge could be wrong (but they're still final)
+- Judges could be wrong (but they're still final)
 
-### 3. **Multi-Judge Mode** (Supreme Court Style)
-*Multiple judges vote, majority rules (like adult supervision but democratic)*
+## ⚖️ Setting Up Judges - Simple & Direct
 
-**How it works:**
-- Multiple judges selected from unanimous pool
-- Judges vote on winners, majority decision wins
-- If judges tie, falls back to player voting
-- Faster than pure democracy, more reliable than single judge
+*The current judge system is streamlined and easy - choose your path at game creation*
 
-**Perfect for:**
-- Really high-value games
-- When you need multiple perspectives  
-- Tournament finals
-- Maximum legitimacy with speed
+### Decision Made At Game Creation
 
-**Pros:**
-- Multiple expert opinions reduce bias
-- Majority voting prevents single-judge errors
-- Still authoritative and fast
-- Built-in checks and balances
+When creating a game, you pick your decision method with a simple radio button:
 
-**Cons:**
-- Judges might tie (back to player voting)
-- More complex to organize
-- Need odd number of judges to avoid ties
+**Option 1: Player Vote (Default)**
+- All players vote on winners after the game
+- Shows majority calculation (e.g., "3 out of 4 players needed for majority")
+- No judges needed - pure democracy
+- Perfect for casual games with trusted friends
 
-## ⚖️ Setting Up Judges (The Two-Step Dance)
+**Option 2: Judge Decision**
+- Host adds specific judges during game creation
+- Enter judges by username, ENS name, or wallet address  
+- Real-time validation and address resolution
+- Judges vote for free (no buy-in required)
+- Can add multiple judges for panel decisions
 
-*This is how the judge system actually works - pay attention, it's more sophisticated than you think*
+### Adding Judges (Judge Decision Mode Only)
 
-### Step 1: Build Your Personal Judge Army (Do This Once)
+**Simple Process:**
+1. Select "Judge Decision" when creating game
+2. Enter judge identifier in the input field:
+   - Username (if they have one set)
+   - ENS name (like "vitalik.eth")
+   - Raw wallet address (0x...)
+3. System resolves and validates the address
+4. Add multiple judges if desired
+5. Judges will be notified and can vote on winners
 
-Before you even play games, you need to set up your trusted judge list:
+**Judge Selection Tips:**
+- **Neutral Party:** Someone not playing in the game
+- **Available:** Make sure they'll be present to judge
+- **Trustworthy:** Someone all players respect
+- **Knowledgeable:** Understands the game being played
 
-- **Unlimited Judges:** Add as many judge wallets as you want to your personal list
-- **Your Choice:** These are YOUR trusted arbitrators (could be 1, could be 100)
-- **One-Time Setup:** Do this in your account settings, applies to all future games
-- **Strategic:** More judges = better chance of finding unanimous matches
-
-**Example Personal Judge Lists:**
-```
-Alice's judges: [0xJudge1, 0xJudge2, 0xJudge3, 0xJudge4, 0xJudge5]
-Bob's judges:   [0xJudge2, 0xJudge3, 0xJudge6, 0xJudge7]  
-Charlie's judges: [0xJudge2, 0xJudge3, 0xJudge8, 0xJudge9, 0xJudge10]
-```
-
-### Step 2: Find Unanimous Judges (Per Game)
-
-When you start a game, the system finds the overlap:
-
-- **Unanimous Pool:** Only wallets that ALL players have on their lists
-- **No Partial Matches:** If even one player doesn't trust a judge, they're out
-- **Democracy:** This ensures everyone agreed to these judges beforehand
-
-**From the example above:**
-```
-Alice's judges: [0xJudge1, 0xJudge2, 0xJudge3, 0xJudge4, 0xJudge5]
-Bob's judges:   [0xJudge2, 0xJudge3, 0xJudge6, 0xJudge7]
-Charlie's judges: [0xJudge2, 0xJudge3, 0xJudge8, 0xJudge9, 0xJudge10]
-
-→ Unanimous judges for this game: [0xJudge2, 0xJudge3]
-```
-
-### Step 3: Select Active Judges (Any Player Can Do This)
-
-Once you have the unanimous pool, anyone in the game can activate judges:
-
-- **Player Control:** Any player can select from the unanimous pool
-- **Multiple Selection:** Can pick 1, 2, or more judges from the pool
-- **Majority Rules:** With multiple judges, majority vote wins
-- **Fallback Ready:** If no judges selected, defaults to player voting
-
-**Selection Examples:**
-- Pick just 0xJudge2 → Their decision is final
-- Pick both 0xJudge2 and 0xJudge3 → They vote, majority wins
-- Pick nobody → Falls back to player democracy
+**Multiple Judge Voting:**
+- With multiple judges, majority rules
+- Odd numbers prevent ties (3, 5, 7 judges ideal)
+- All judges vote independently on winners
 
 ## 🎮 Real-World Examples (How This Actually Plays Out)
 
@@ -351,10 +322,10 @@ Three Winners:
 
 ---
 
-**🧠 Remember:** *The goal isn't perfect fairness (impossible), it's minimizing the drama while maximizing the fun.*
+**🧠 Remember:** *The goal isn't perfect fairness (impossible), it's keeping it salt-free while maximizing the fun.*
 
-**⚖️ Pro Tip:** *When in doubt, appoint a judge. Democracy is overrated when money's involved.*
+**⚖️ Pro Tip:** *When in doubt, use judges. Democracy can get salty when money's involved.*
 
 ---
 
-*Now go forth and settle your disputes like the civilized degenerates you pretend to be.*
+*Now go forth and settle your games like the civilized degenerates you are - salt-free and profitable.*

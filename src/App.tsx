@@ -8,6 +8,8 @@ import GameDashboard from './components/GameDashboard';
 import GameDetailPage from './pages/GameDetailPage';
 import MultiGamePage from './pages/MultiGamePage';
 import TestPage from './pages/TestPage';
+import DebugPage from './pages/DebugPage';
+import Footer from './components/Footer';
 import { GameDataProvider } from './contexts/GameDataContext';
 import { UserProvider } from './contexts/UserContext';
 import { validateEnvironment } from './utils/envUtils';
@@ -183,11 +185,14 @@ function App() {
                     <Route path="/games/mine" element={<GameDashboard filter="mine" />} />
                     <Route path="/leaderboard" element={<GameDashboard view="leaderboard" />} />
                     <Route path="/test" element={<TestPage />} />
+                    <Route path="/debug" element={<DebugPage />} />
                     <Route path="/game/:gameCode" element={<GameDetailPage />} />
                     <Route path="/game/*" element={<MultiGamePage />} />
                     <Route path="/join/:gameCode" element={<GameDetailPage autoJoin={true} />} />
                   </Routes>
                 </MainContent>
+                
+                <Footer />
                 
                 {/* Toast notifications */}
                 <Toaster

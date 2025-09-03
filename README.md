@@ -1,19 +1,19 @@
-# 🎰 Pony Up - Judge Your Friends Like A True Degen
+# 🧂 SaltFree - Get Paid Without The Drama
 
-> *Because sometimes you need a neutral third party to tell your friends they fucking lost*
+> *Because winners deserve their money without the salt*
 
-## 🚀 What The Fuck Is This?
+## 🚀 What Is This Glorious Thing?
 
-Pony Up is a Web3 escrow platform for your IRL competitions. Instead of trusting your drunk friends to pay up after losing at poker, FIFA, or beer pong, you all put ETH into a smart contract first. When the game's over, winners get paid automatically. No bullshit, no "I'll Venmo you later," just cold hard crypto.
+SaltFree is a Web3 platform to pay and win online or IRL games free of salty interactions. Instead of trusting your drunk friends to pay up after losing at poker, FIFA, or beer pong, you all put ETH into a smart contract first. When the game's over, winners get paid automatically. No salt, no "I'll Venmo you later," just cold hard crypto.
 
 ### 🔥 Features That Actually Matter
 
 - **💰 Decentralized Escrow** - Smart contract holds the pot, not your sketchy friend
-- **🧑‍⚖️ Judge System** - Neutral third party settles disputes (because your friends are liars)
-- **🗳️ Democratic Voting** - No judge? Players vote on who won (good luck with that)
+- **🧑‍⚖️ Judge System** - Neutral refs keep it salt-free (no more arguing over who won)
+- **🗳️ Democratic Voting** - No judge? Players vote on winners (democracy minus the drama)
 - **🏆 Multi-Winner Payouts** - 1st, 2nd, 3rd place splits like a real tournament
 - **🔒 Game Locking** - Stop randos from joining your private degen sessions
-- **📱 Mobile Ready** - Lose money from anywhere with a wallet
+- **📱 Mobile Ready** - Win from anywhere, collect everywhere
 - **🎯 Game Codes** - Share "WTF-420" instead of contract addresses
 - **⚡ Ultra-Fast Discovery** - Finds your games in 2-5 RPC calls (not 40+)
 - **🔗 On-Chain Transparency** - Every decision recorded forever on blockchain
@@ -27,28 +27,32 @@ Pony Up is a Web3 escrow platform for your IRL competitions. Instead of trusting
 
 2. **Add Your Degens & Set Rules** 👥
    - Share the code with your fellow gambling addicts  
-   - Appoint a judge (someone you actually trust, good luck)
+   - Choose decision method: Player Vote or Judge Decision
    - Set prize splits (70/30, 50/30/20, whatever floats your boat)
-   - Lock that shit when you're ready
+   - Lock that game when you're ready
 
-3. **Play & Report Like Adults** 🎯
+3. **Play Your Game** 🎯
    - Go play poker, chess, beer pong, whatever
-   - Report winners in order (1st gets the most, obviously)
-   - Judge decides OR everyone votes (democracy vs dictatorship)
+   - Have fun, stack chips, crush dreams
 
-4. **Get Your Money** 💵
+4. **Vote for Winners** 🗳️
+   - Players vote on who won (democracy mode)
+   - OR judges decide (authority mode)
+   - Majority rules, no salt allowed
+
+5. **Get Your Money** 💵
    - Winners claim their exact share
    - Instant payouts to wallet
-   - Go lose it all on something else
+   - Stack your wins for the next round
 
 ## 🛠️ Features That Don't Suck
 
 ### For Players (The Cannon Fodder)
 - **ENS Support** - Flex that .eth domain you overpaid for
 - **Custom Names** - For peasants without ENS domains
-- **Game History** - Track your L's and occasional W's  
+- **Game History** - Track your degen journey to glory
 - **Winner Badges** - Visual proof you're not always a loser
-- **Mobile Ready** - Lose money on the go!
+- **Mobile Ready** - Win from anywhere, collect everywhere
 
 ### For Hosts (The House Always Wins)
 - **Flexible Stakes** - 0.001 ETH to "sell your house" levels

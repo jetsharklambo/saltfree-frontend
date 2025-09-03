@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { useActiveAccount } from "thirdweb/react";
 import { readContract, prepareContractCall, sendTransaction, waitForReceipt } from 'thirdweb';
+import toast from 'react-hot-toast';
 import { ArrowLeft, Users, Clock, Lock, Trophy, Share2, Coins, Scale, UserCheck, PlusCircle, UserMinus } from 'lucide-react';
 import { getGameContract, formatEth, formatPrizeSplit } from '../thirdweb';
 import { getDisplayNameByAddressSync, preloadDisplayNames, getDisplayNamesByAddresses } from '../utils/userUtils';
@@ -687,6 +688,18 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
     loadGame();
   }, [gameCode, autoJoin, account?.address]);
 
+  // Handle errors with toast notifications instead of error page
+  useEffect(() => {
+    if (error) {
+      toast.error(error, { duration: 5000 });
+      // Redirect to dashboard after showing error
+      const timer = setTimeout(() => {
+        navigate('/');
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, navigate]);
+
   // Handle joining the game
   const handleJoinGame = async () => {
     if (!game || !account?.address) return;
@@ -993,23 +1006,6 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
     );
   }
 
-  if (error) {
-    return (
-      <>
-        <Helmet>
-          <title>Game Not Found - Pony Up!</title>
-        </Helmet>
-        <PageContainer>
-          <BackButton onClick={() => navigate('/')}>
-            <ArrowLeft size={20} />
-            Back to Dashboard
-          </BackButton>
-          <ErrorMessage>{error}</ErrorMessage>
-        </PageContainer>
-      </>
-    );
-  }
-
   if (!game) {
     return (
       <PageContainer>
@@ -1023,7 +1019,7 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
   }
 
   const shareUrl = `${window.location.origin}/game/${gameCode}`;
-  const shareTitle = `Join game ${gameCode} on Pony Up!`;
+  const shareTitle = `Join game ${gameCode} on SaltFree - No Salt, Just Wins`;
   const shareDescription = `Buy-in: ${formatEth(game.buyIn)} ETH | Players: ${game.currentPlayers}/${game.maxPlayers}`;
 
   return (
@@ -1035,11 +1031,11 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
         <meta property="og:description" content={shareDescription} />
         <meta property="og:url" content={shareUrl} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content={`${window.location.origin}/pony-up-social.png`} />
+        <meta property="og:image" content={`${window.location.origin}/saltfree-social.png`} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={shareTitle} />
         <meta name="twitter:description" content={shareDescription} />
-        <meta name="twitter:image" content={`${window.location.origin}/pony-up-social.png`} />
+        <meta name="twitter:image" content={`${window.location.origin}/saltfree-social.png`} />
       </Helmet>
       
       <PageContainer>

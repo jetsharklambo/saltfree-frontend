@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { useActiveAccount } from "thirdweb/react";
 import { readContract } from 'thirdweb';
+import toast from 'react-hot-toast';
 import { ArrowLeft, Users, Clock, Lock, Trophy, Share2 } from 'lucide-react';
 import { getGameContract, formatEth } from '../thirdweb';
 import { getDisplayNameByAddressSync } from '../utils/userUtils';
@@ -107,12 +108,6 @@ const StatLabel = styled.div`
   color: rgba(255, 255, 255, 0.6);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-`;
-
-const ErrorCard = styled(GlassCard)`
-  padding: 1.5rem;
-  text-align: center;
-  color: #ff6b6b;
 `;
 
 const LoadingCard = styled(GlassCard)`
@@ -335,6 +330,21 @@ export default function MultiGamePage() {
     loadGames();
   }, [pathParams, navigate]);
 
+  const validGames = games.filter(g => !g.error);
+  const errorGames = games.filter(g => g.error);
+  
+  // Show toast notifications for error games
+  useEffect(() => {
+    errorGames.forEach(game => {
+      if (game.error) {
+        toast.error(`${game.gameCode}: ${game.error}`, { 
+          duration: 5000,
+          id: `error-${game.gameCode}` // Prevent duplicate toasts
+        });
+      }
+    });
+  }, [errorGames]);
+
   const handleGameClick = (game: GameInfo) => {
     setSelectedGame(game);
   };
@@ -359,12 +369,11 @@ export default function MultiGamePage() {
       </PageContainer>
     );
   }
-
-  const validGames = games.filter(g => !g.error);
-  const shareTitle = `${validGames.length} Games on Pony Up!`;
+  
+  const shareTitle = `${validGames.length} Salt-Free Games!`;
   const shareDescription = validGames.length > 0 
-    ? `View ${validGames.length} poker games: ${validGames.map(g => g.gameCode).join(', ')}`
-    : 'Multiple poker games on the blockchain';
+    ? `View ${validGames.length} games: ${validGames.map(g => g.gameCode).join(', ')}`
+    : 'Multiple salt-free games with instant payouts';
 
   return (
     <>
@@ -395,106 +404,99 @@ export default function MultiGamePage() {
 
         <div style={{ marginBottom: '2rem' }}>
           <h1 style={{ color: 'rgba(255, 255, 255, 0.95)', margin: '0 0 0.5rem 0', fontSize: '2rem' }}>
-            {games.length} Games
+            {validGames.length} Games
           </h1>
-          <p style={{ color: 'rgba(255, 255, 255, 0.7)', margin: 0 }}>
-            {validGames.length} found, {games.filter(g => g.error).length} not found
-          </p>
+          {errorGames.length > 0 && (
+            <p style={{ color: 'rgba(255, 255, 255, 0.7)', margin: 0 }}>
+              {validGames.length} found, {errorGames.length} not found
+            </p>
+          )}
         </div>
 
         <GamesGrid>
-          {games.map((game, index) => (
-            game.error ? (
-              <ErrorCard key={game.gameCode}>
-                <h3 style={{ margin: '0 0 1rem 0', color: '#ff6b6b' }}>
-                  {game.gameCode}
-                </h3>
-                <p style={{ margin: 0 }}>{game.error}</p>
-              </ErrorCard>
-            ) : (
-              <GameCard key={game.gameCode} onClick={() => handleGameClick(game)}>
-                <GameHeader>
-                  <div>
-                    <GameTitle>{game.gameCode}</GameTitle>
-                    <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>
-                      Host: {getDisplayNameByAddressSync(game.host)}
-                    </p>
-                  </div>
-                  
-                  <FlexContainer direction="column" align="flex-end" gap="0.5rem">
-                    {game.isCompleted && (
-                      <div style={{ 
-                        padding: '0.25rem 0.75rem', 
-                        backgroundColor: 'rgba(34, 197, 94, 0.2)', 
-                        borderRadius: '6px',
-                        fontSize: '0.8rem',
-                        color: '#22c55e'
-                      }}>
-                        COMPLETE
-                      </div>
-                    )}
-                    {game.isLocked && !game.isCompleted && (
-                      <div style={{ 
-                        padding: '0.3rem 0.8rem', 
-                        background: 'rgba(251, 191, 36, 0.15)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        border: '1px solid rgba(245, 158, 11, 0.3)',
-                        borderRadius: '8px',
-                        fontSize: '0.75rem',
-                        fontWeight: '500',
-                        color: 'rgba(245, 158, 11, 0.9)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)'
-                      }}>
-                        <Lock size={11} />
-                        Locked
-                      </div>
-                    )}
-                  </FlexContainer>
-                </GameHeader>
-
-                <GameStats>
-                  <StatItem>
-                    <StatValue>{formatEth(game.buyIn)} ETH</StatValue>
-                    <StatLabel>Buy-In</StatLabel>
-                  </StatItem>
-                  
-                  <StatItem>
-                    <StatValue>{game.currentPlayers}/{game.maxPlayers}</StatValue>
-                    <StatLabel>Players</StatLabel>
-                  </StatItem>
-                  
-                  <StatItem>
-                    <StatValue>{formatEth((BigInt(game.buyIn) * BigInt(game.currentPlayers)).toString())} ETH</StatValue>
-                    <StatLabel>Pot</StatLabel>
-                  </StatItem>
-                </GameStats>
-
-                {game.winners.length > 0 && (
-                  <div style={{ 
-                    marginTop: '1rem', 
-                    padding: '0.75rem', 
-                    backgroundColor: 'rgba(255, 215, 0, 0.1)', 
-                    borderRadius: '8px',
-                    borderLeft: '3px solid #ffd700'
-                  }}>
+          {validGames.map((game, index) => (
+            <GameCard key={game.gameCode} onClick={() => handleGameClick(game)}>
+              <GameHeader>
+                <div>
+                  <GameTitle>{game.gameCode}</GameTitle>
+                  <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>
+                    Host: {getDisplayNameByAddressSync(game.host)}
+                  </p>
+                </div>
+                
+                <FlexContainer direction="column" align="flex-end" gap="0.5rem">
+                  {game.isCompleted && (
                     <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '0.5rem', 
-                      fontSize: '0.9rem',
-                      color: '#ffd700'
+                      padding: '0.25rem 0.75rem', 
+                      backgroundColor: 'rgba(34, 197, 94, 0.2)', 
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      color: '#22c55e'
                     }}>
-                      <Trophy size={16} />
-                      Winners: {game.winners.length}
+                      COMPLETE
                     </div>
+                  )}
+                  {game.isLocked && !game.isCompleted && (
+                    <div style={{ 
+                      padding: '0.3rem 0.8rem', 
+                      background: 'rgba(251, 191, 36, 0.15)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      borderRadius: '8px',
+                      fontSize: '0.75rem',
+                      fontWeight: '500',
+                      color: 'rgba(245, 158, 11, 0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)'
+                    }}>
+                      <Lock size={11} />
+                      Locked
+                    </div>
+                  )}
+                </FlexContainer>
+              </GameHeader>
+
+              <GameStats>
+                <StatItem>
+                  <StatValue>{formatEth(game.buyIn)} ETH</StatValue>
+                  <StatLabel>Buy-In</StatLabel>
+                </StatItem>
+                
+                <StatItem>
+                  <StatValue>{game.currentPlayers}/{game.maxPlayers}</StatValue>
+                  <StatLabel>Players</StatLabel>
+                </StatItem>
+                
+                <StatItem>
+                  <StatValue>{formatEth((BigInt(game.buyIn) * BigInt(game.currentPlayers)).toString())} ETH</StatValue>
+                  <StatLabel>Pot</StatLabel>
+                </StatItem>
+              </GameStats>
+
+              {game.winners.length > 0 && (
+                <div style={{ 
+                  marginTop: '1rem', 
+                  padding: '0.75rem', 
+                  backgroundColor: 'rgba(255, 215, 0, 0.1)', 
+                  borderRadius: '8px',
+                  borderLeft: '3px solid #ffd700'
+                }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem', 
+                    fontSize: '0.9rem',
+                    color: '#ffd700'
+                  }}>
+                    <Trophy size={16} />
+                    Winners: {game.winners.length}
                   </div>
-                )}
-              </GameCard>
-            )
+                </div>
+              )}
+            </GameCard>
           ))}
         </GamesGrid>
       </PageContainer>

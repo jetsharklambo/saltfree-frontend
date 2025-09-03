@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveAccount } from "thirdweb/react";
 import { prepareContractCall, sendTransaction, readContract } from "thirdweb";
+import toast from 'react-hot-toast';
 import { X, Users, Search, Shield } from 'lucide-react';
 import { gameContract, formatEth, formatAddress } from '../thirdweb';
 import { logBuyInInfo, formatBuyInForDisplay, compareTransactionParams } from '../utils/buyInUtils';
@@ -232,6 +233,9 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
     try {
       setJoining(true);
       setError('');
+      
+      // Show loading toast
+      toast.loading('Joining game...', { id: 'join-game' });
 
       // Log transaction details for debugging
       // Use 0 buy-in if joining as judge, otherwise use game buy-in
@@ -352,6 +356,9 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
         }
       }
 
+      // Show success toast
+      toast.success('Successfully joined game!', { id: 'join-game' });
+
       // Pass game data back for immediate addition
       onSuccess({
         gameCode: gameInfo.gameCode,
@@ -387,6 +394,9 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
           errorMessage = err.message;
         }
       }
+      
+      // Show error toast
+      toast.error(`Failed to join game: ${errorMessage}`, { id: 'join-game' });
       
       setError(errorMessage);
     } finally {
