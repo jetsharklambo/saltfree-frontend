@@ -4,9 +4,9 @@ import { useUser } from '../contexts/UserContext';
 import { getDisplayNameInfo } from '../utils/userUtils';
 import {
   GlassCard,
-  GlassButton,
-  FlexContainer
+  GlassButton
 } from '../styles/glass';
+import { FlexBlock, blockTheme } from '../styles/blocks';
 import styled from '@emotion/styled';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -154,7 +154,7 @@ const ENSBadge: React.FC<{ address: string }> = ({ address }) => {
   return (
     <div style={{
       fontSize: '0.65rem',
-      color: 'rgba(139, 92, 246, 0.8)',
+      color: blockTheme.accent,
       marginTop: '2px',
       fontFamily: 'monospace',
       display: 'flex',

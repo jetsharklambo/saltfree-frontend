@@ -10,11 +10,14 @@ import { useUser } from '../contexts/UserContext';
 
 // Using direct contract values like working /pony-upv3 code
 import { 
-  GlassButton, 
-  GlassInput,
-  LoadingSpinner,
-  glassTheme 
-} from '../styles/glass';
+  BlockButton, 
+  BlockInput,
+  BlockModal,
+  BlockModalContent,
+  blockTheme,
+  PixelText
+} from '../styles/blocks';
+import { SimpleRetroLoader } from './RetroLoader';
 import styled from '@emotion/styled';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -39,12 +42,11 @@ const ModalOverlay = styled(motion.div)`
   padding: 1rem;
 `;
 
-const ModalContainer = styled(motion.div)`
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  padding: 2rem;
+const ModalContainer = styled(BlockModalContent)`
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
   max-width: 500px;
   width: 100%;
   position: relative;
@@ -57,28 +59,36 @@ const ModalHeader = styled.div`
   margin-bottom: 1.5rem;
 `;
 
-const ModalTitle = styled.h2`
+const ModalTitle = styled(PixelText)`
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), ${glassTheme.primary});
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: ${blockTheme.darkText};
 `;
 
 const CloseButton = styled.button`
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.7);
+  background: ${blockTheme.pastelCoral};
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  color: ${blockTheme.darkText};
   cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.2s ease;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowMedium};
   
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: ${blockTheme.pastelPeach};
+    transform: translateY(2px);
+    box-shadow: 2px 2px 0px ${blockTheme.shadowMedium};
+  }
+  
+  &:active {
+    transform: translateY(4px);
+    box-shadow: none;
   }
 `;
 
@@ -89,18 +99,19 @@ const InputContainer = styled.div`
 `;
 
 const GameInfoCard = styled(motion.div)`
-  background: rgba(102, 126, 234, 0.15);
-  border: 1px solid rgba(102, 126, 234, 0.3);
+  background: ${blockTheme.pastelBlue};
+  border: 4px solid ${blockTheme.darkText};
   border-radius: 16px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
+  box-shadow: 6px 6px 0px ${blockTheme.shadowMedium};
 `;
 
 const GameCodeTitle = styled.h3`
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0 0 1rem 0;
-  color: ${glassTheme.primary};
+  color: ${blockTheme.primary};
 `;
 
 const GameStats = styled.div`
@@ -115,38 +126,43 @@ const StatItem = styled.div`
   align-items: center;
   gap: 0.5rem;
   font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: ${blockTheme.darkText};
+  font-weight: 600;
 `;
 
 const HostInfo = styled.div`
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: ${blockTheme.textMuted};
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 3px solid ${blockTheme.darkText};
 `;
 
 const InfoNote = styled.div`
-  background: rgba(255, 193, 7, 0.15);
-  border: 1px solid rgba(255, 193, 7, 0.3);
+  background: ${blockTheme.pastelYellow};
+  border: 3px solid ${blockTheme.darkText};
   border-radius: 12px;
   padding: 1rem;
   margin-bottom: 1.5rem;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: ${blockTheme.darkText};
+  box-shadow: 4px 4px 0px ${blockTheme.shadowLight};
   
   strong {
-    color: #ffd700;
+    color: ${blockTheme.darkText};
+    font-weight: 700;
   }
 `;
 
 const ErrorMessage = styled(motion.div)`
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: ${blockTheme.pastelCoral};
+  border: 3px solid ${blockTheme.error};
   border-radius: 12px;
   padding: 1rem;
   margin-bottom: 1rem;
-  color: #ff6b6b;
+  color: ${blockTheme.darkText};
   font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowLight};
 `;
 
 const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initialGameCode, joinAsJudge = false }) => {
@@ -425,7 +441,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
         </ModalHeader>
 
         <InputContainer>
-          <GlassInput
+          <BlockInput
             placeholder="Enter game code (e.g. ABC-123)"
             value={gameCode}
             onChange={(e) => setGameCode(e.target.value.toUpperCase())}
@@ -433,19 +449,19 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
             style={{ flex: 1 }}
             disabled={loading}
           />
-          <GlassButton
+          <BlockButton
             variant="secondary"
             onClick={lookupGame}
             disabled={loading || !gameCode.trim()}
             $loading={loading}
           >
             {loading ? (
-              <LoadingSpinner />
+              <SimpleRetroLoader />
             ) : (
               <Search size={16} />
             )}
             Find
-          </GlassButton>
+          </BlockButton>
         </InputContainer>
 
         <AnimatePresence mode="wait">
@@ -487,16 +503,8 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
           )}
         </AnimatePresence>
 
-        {gameInfo && (
-          <InfoNote>
-            <strong>Note:</strong> {joinAsJudge 
-              ? 'You are joining as a judge with no buy-in required. You can help determine winners but cannot win yourself.'
-              : 'If you\'re set as a judge by other players, you\'ll automatically join as a judge with no buy-in required.'
-            }
-          </InfoNote>
-        )}
 
-        <GlassButton
+        <BlockButton
           onClick={handleJoin}
           disabled={joining || !gameInfo}
           $loading={joining}
@@ -504,7 +512,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
         >
           {joining ? (
             <>
-              <LoadingSpinner />
+              <SimpleRetroLoader />
               {joinAsJudge ? 'Joining as Judge...' : 'Joining Game...'}
             </>
           ) : joinAsJudge ? (
@@ -518,7 +526,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({ onClose, onSuccess, initi
               Join Game ({gameInfo ? formatEth(gameInfo.buyIn) : '0'} ETH)
             </>
           )}
-        </GlassButton>
+        </BlockButton>
       </ModalContainer>
     </ModalOverlay>
   );

@@ -4,12 +4,13 @@ import { useUser } from '../contexts/UserContext';
 import { databaseService } from '../services/databaseService';
 import { Database } from '../lib/database.types';
 import {
-  GlassModal,
-  GlassModalContent,
-  GlassButton,
-  FlexContainer,
-  LoadingSpinner
-} from '../styles/glass';
+  BlockModal,
+  BlockModalContent,
+  BlockButton,
+  blockTheme
+} from '../styles/blocks';
+import { SimpleRetroLoader } from './RetroLoader';
+import { FlexBlock } from '../styles/blocks';
 
 type GameHistory = Database['public']['Tables']['game_history']['Row'];
 
@@ -89,10 +90,10 @@ export const GameHistoryModal: React.FC<GameHistoryModalProps> = ({ isOpen, onCl
 
   const getResultColor = (result: string) => {
     switch (result) {
-      case 'won': return 'rgba(34, 197, 94, 0.9)';
-      case 'lost': return 'rgba(239, 68, 68, 0.9)';
-      case 'active': return 'rgba(59, 130, 246, 0.9)';
-      default: return 'rgba(107, 114, 128, 0.9)';
+      case 'won': return blockTheme.success;
+      case 'lost': return blockTheme.error;
+      case 'active': return blockTheme.info;
+      default: return blockTheme.textMuted;
     }
   };
 
@@ -108,41 +109,42 @@ export const GameHistoryModal: React.FC<GameHistoryModalProps> = ({ isOpen, onCl
   if (!isOpen) return null;
 
   return (
-    <GlassModal>
-      <GlassModalContent style={{ maxWidth: '800px', maxHeight: '85vh', overflow: 'auto' }}>
-        <FlexContainer justify="space-between" align="center" style={{ marginBottom: '1.5rem' }}>
-          <FlexContainer align="center" gap="0.5rem">
-            <TrendingUp size={24} style={{ color: 'rgba(139, 92, 246, 0.9)' }} />
+    <BlockModal>
+      <BlockModalContent style={{ maxWidth: '800px', maxHeight: '85vh', overflow: 'auto' }}>
+        <FlexBlock justify="space-between" align="center" style={{ marginBottom: '1.5rem' }}>
+          <FlexBlock align="center" gap="0.5rem">
+            <TrendingUp size={24} style={{ color: blockTheme.accent }} />
             <h2 style={{ 
               margin: 0, 
               fontSize: '1.5rem', 
-              color: 'rgba(255, 255, 255, 0.9)',
+              color: blockTheme.darkText,
               fontWeight: '600'
             }}>
               Game History & Stats
             </h2>
-          </FlexContainer>
-          <GlassButton 
+          </FlexBlock>
+          <BlockButton 
             onClick={onClose}
+            color="pastelCoral"
             style={{ 
               padding: '0.5rem',
-              minWidth: 'auto',
-              background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.3)'
+              minWidth: 'auto'
             }}
           >
             <X size={18} />
-          </GlassButton>
-        </FlexContainer>
+          </BlockButton>
+        </FlexBlock>
 
         {error && (
           <div style={{ 
-            background: 'rgba(239, 68, 68, 0.1)', 
-            border: '1px solid rgba(239, 68, 68, 0.3)', 
+            background: blockTheme.pastelCoral, 
+            border: `3px solid ${blockTheme.error}`, 
             padding: '0.75rem', 
             borderRadius: '8px', 
             marginBottom: '1rem',
-            color: 'rgba(239, 68, 68, 0.9)'
+            color: blockTheme.darkText,
+            fontWeight: '600',
+            boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
           }}>
             {error}
           </div>
@@ -152,7 +154,7 @@ export const GameHistoryModal: React.FC<GameHistoryModalProps> = ({ isOpen, onCl
         <div style={{ marginBottom: '2rem' }}>
           <h3 style={{ 
             margin: '0 0 1rem 0', 
-            color: 'rgba(255, 255, 255, 0.9)',
+            color: blockTheme.darkText,
             fontSize: '1.2rem',
             display: 'flex',
             alignItems: 'center',
@@ -204,7 +206,7 @@ export const GameHistoryModal: React.FC<GameHistoryModalProps> = ({ isOpen, onCl
         <div>
           <h3 style={{ 
             margin: '0 0 1rem 0', 
-            color: 'rgba(255, 255, 255, 0.9)',
+            color: blockTheme.darkText,
             fontSize: '1.2rem',
             display: 'flex',
             alignItems: 'center',
@@ -215,72 +217,75 @@ export const GameHistoryModal: React.FC<GameHistoryModalProps> = ({ isOpen, onCl
           </h3>
 
           {loading ? (
-            <FlexContainer justify="center" align="center" style={{ padding: '2rem' }}>
-              <LoadingSpinner size="2rem" />
-              <span style={{ marginLeft: '1rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+            <FlexBlock justify="center" align="center" style={{ padding: '2rem' }}>
+              <SimpleRetroLoader size="2rem" />
+              <span style={{ marginLeft: '1rem', color: blockTheme.textMuted }}>
                 Loading game history...
               </span>
-            </FlexContainer>
+            </FlexBlock>
           ) : gameHistory.length === 0 ? (
-            <FlexContainer 
+            <FlexBlock 
               direction="column" 
               align="center" 
               justify="center" 
               style={{ padding: '3rem', textAlign: 'center' }}
             >
-              <Calendar size={48} style={{ color: 'rgba(255, 255, 255, 0.3)', marginBottom: '1rem' }} />
-              <h4 style={{ color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 0.5rem 0' }}>
+              <Calendar size={48} style={{ color: blockTheme.textMuted, marginBottom: '1rem' }} />
+              <h4 style={{ color: blockTheme.textSecondary, margin: '0 0 0.5rem 0' }}>
                 No Game History
               </h4>
-              <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>
+              <p style={{ color: blockTheme.textMuted, margin: 0 }}>
                 Your game results will appear here once you start playing
               </p>
-            </FlexContainer>
+            </FlexBlock>
           ) : (
             <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
               {gameHistory.map((game) => (
                 <div
                   key={game.id}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    background: blockTheme.pastelMint,
+                    border: `3px solid ${blockTheme.darkText}`,
                     borderRadius: '8px',
                     padding: '1rem',
                     marginBottom: '0.75rem',
+                    boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`,
                   }}
                 >
-                  <FlexContainer justify="space-between" align="center">
-                    <FlexContainer direction="column" gap="0.25rem" style={{ flex: 1 }}>
-                      <FlexContainer align="center" gap="0.5rem">
+                  <FlexBlock justify="space-between" align="center">
+                    <FlexBlock direction="column" gap="0.25rem" style={{ flex: 1 }}>
+                      <FlexBlock align="center" gap="0.5rem">
                         <code style={{ 
-                          background: 'rgba(255, 255, 255, 0.1)', 
+                          background: blockTheme.pastelYellow, 
                           padding: '0.25rem 0.5rem', 
                           borderRadius: '4px',
                           fontSize: '0.85rem',
-                          color: 'rgba(255, 255, 255, 0.9)'
+                          color: blockTheme.darkText,
+                          border: `2px solid ${blockTheme.darkText}`,
+                          fontWeight: '600'
                         }}>
                           {game.game_code}
                         </code>
-                        <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem' }}>
+                        <span style={{ color: blockTheme.textMuted, fontSize: '0.8rem' }}>
                           {game.game_type}
                         </span>
-                      </FlexContainer>
-                      <FlexContainer align="center" gap="1rem">
-                        <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>
+                      </FlexBlock>
+                      <FlexBlock align="center" gap="1rem">
+                        <span style={{ color: blockTheme.textSecondary, fontSize: '0.9rem' }}>
                           Buy-in: {formatEth(game.buy_in_amount)} ETH
                         </span>
                         {game.winnings && (
-                          <span style={{ color: 'rgba(245, 158, 11, 0.9)', fontSize: '0.9rem' }}>
+                          <span style={{ color: blockTheme.warning, fontSize: '0.9rem' }}>
                             Winnings: {formatEth(game.winnings)} ETH
                           </span>
                         )}
-                      </FlexContainer>
-                      <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.8rem' }}>
+                      </FlexBlock>
+                      <span style={{ color: blockTheme.textMuted, fontSize: '0.8rem' }}>
                         {formatDate(game.created_at)}
                       </span>
-                    </FlexContainer>
+                    </FlexBlock>
                     
-                    <FlexContainer 
+                    <FlexBlock 
                       align="center" 
                       gap="0.5rem"
                       style={{ 
@@ -292,15 +297,15 @@ export const GameHistoryModal: React.FC<GameHistoryModalProps> = ({ isOpen, onCl
                     >
                       {getResultIcon(game.result)}
                       {game.result}
-                    </FlexContainer>
-                  </FlexContainer>
+                    </FlexBlock>
+                  </FlexBlock>
                 </div>
               ))}
             </div>
           )}
         </div>
-      </GlassModalContent>
-    </GlassModal>
+      </BlockModalContent>
+    </BlockModal>
   );
 };
 
@@ -313,30 +318,31 @@ interface StatCardProps {
 
 const StatCard: React.FC<StatCardProps> = ({ icon, label, value, color }) => (
   <div style={{
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    background: blockTheme.pastelBlue,
+    border: `3px solid ${blockTheme.darkText}`,
     borderRadius: '8px',
     padding: '1rem',
     textAlign: 'center',
+    boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
   }}>
-    <FlexContainer direction="column" align="center" gap="0.5rem">
+    <FlexBlock direction="column" align="center" gap="0.5rem">
       <div style={{ color }}>{icon}</div>
       <div style={{ 
         fontSize: '1.5rem', 
         fontWeight: '700', 
-        color: 'rgba(255, 255, 255, 0.9)',
+        color: blockTheme.darkText,
         marginBottom: '0.25rem'
       }}>
         {value}
       </div>
       <div style={{ 
         fontSize: '0.8rem', 
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: blockTheme.textMuted,
         textTransform: 'uppercase',
         letterSpacing: '0.5px'
       }}>
         {label}
       </div>
-    </FlexContainer>
+    </FlexBlock>
   </div>
 );

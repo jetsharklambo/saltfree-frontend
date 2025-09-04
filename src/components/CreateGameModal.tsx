@@ -6,7 +6,17 @@ import { X, Plus, Shield, Trash2 } from 'lucide-react';
 import { getGameContract, decodeStringFromHex, client, chain, CONTRACT_ADDRESS } from '../thirdweb';
 import { resolveToWalletAddress, formatResolvedAddress, ResolvedAddress } from '../utils/addressResolver';
 import { pollForNewGame } from '../utils/gamePolling';
-import { GlassModal, GlassModalContent, GlassButton, GlassInput, GlassSelect, FlexContainer, LoadingSpinner } from '../styles/glass';
+import { 
+  BlockModal, 
+  BlockModalContent, 
+  BlockButton, 
+  BlockInput, 
+  BlockSelect,
+  FlexBlock,
+  blockTheme,
+  PixelText
+} from '../styles/blocks';
+import { SimpleRetroLoader } from './RetroLoader';
 import styled from '@emotion/styled';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -26,27 +36,33 @@ const ModalHeader = styled.div`
 const ModalTitle = styled.h3`
   font-size: 1.5rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: ${blockTheme.darkText};
   margin: 0;
 `;
 
 const CloseButton = styled.button`
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: ${blockTheme.pastelCoral};
+  border: 3px solid ${blockTheme.darkText};
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.7);
+  color: ${blockTheme.darkText};
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   
   &:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.9);
-    transform: scale(1.05);
+    background: ${blockTheme.error};
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
+  }
+  
+  &:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
   }
 `;
 
@@ -58,7 +74,7 @@ const FormLabel = styled.label`
   display: block;
   font-size: 0.875rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
+  color: ${blockTheme.darkText};
   margin-bottom: 0.5rem;
 `;
 
@@ -69,20 +85,23 @@ const InfoBox = styled.div<{ variant?: 'info' | 'warning' | 'error' }>`
   margin-bottom: 1.5rem;
   background: ${({ variant = 'info' }) => {
     const backgrounds = {
-      info: 'rgba(102, 126, 234, 0.15)',
-      warning: 'rgba(251, 191, 36, 0.15)',
-      error: 'rgba(239, 68, 68, 0.15)'
+      info: blockTheme.pastelBlue,
+      warning: blockTheme.pastelYellow,
+      error: blockTheme.pastelCoral
     };
     return backgrounds[variant];
   }};
-  border: 1px solid ${({ variant = 'info' }) => {
+  border: 3px solid ${({ variant = 'info' }) => {
     const borders = {
-      info: 'rgba(102, 126, 234, 0.3)',
-      warning: 'rgba(251, 191, 36, 0.3)',
-      error: 'rgba(239, 68, 68, 0.3)'
+      info: blockTheme.info,
+      warning: blockTheme.warning,
+      error: blockTheme.error
     };
     return borders[variant];
   }};
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
+  color: ${blockTheme.darkText};
+  font-weight: 600;
 `;
 
 const TransactionStatus = styled.div`
@@ -97,24 +116,25 @@ const TransactionStatus = styled.div`
   
   .tx-hash {
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: ${blockTheme.textMuted};
     margin-top: 0.25rem;
   }
 `;
 
 const JudgesSection = styled.div`
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: ${blockTheme.pastelMint};
+  border: 3px solid ${blockTheme.darkText};
   border-radius: 16px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
 `;
 
 const JudgesSectionTitle = styled.h3`
   font-size: 1rem;
   font-weight: 600;
   margin: 0 0 1rem 0;
-  color: rgba(255, 255, 255, 0.9);
+  color: ${blockTheme.darkText};
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -128,23 +148,24 @@ const JudgeInputRow = styled.div`
 
 const ResolvedAddressInfo = styled(motion.div)<{ $hasError?: boolean }>`
   background: ${({ $hasError }) => 
-    $hasError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)'};
-  border: 1px solid ${({ $hasError }) => 
-    $hasError ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'};
+    $hasError ? blockTheme.pastelCoral : blockTheme.pastelMint};
+  border: 3px solid ${({ $hasError }) => 
+    $hasError ? blockTheme.error : blockTheme.success};
   border-radius: 12px;
   padding: 0.75rem;
   font-size: 0.85rem;
-  color: ${({ $hasError }) => 
-    $hasError ? '#ff6b6b' : '#4ade80'};
+  color: ${blockTheme.darkText};
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-family: monospace;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
+  font-weight: 600;
 `;
 
 const JudgeItem = styled(motion.div)`
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: ${blockTheme.pastelLavender};
+  border: 3px solid ${blockTheme.darkText};
   border-radius: 12px;
   padding: 1rem;
   margin-bottom: 0.75rem;
@@ -152,10 +173,12 @@ const JudgeItem = styled(motion.div)`
   justify-content: space-between;
   align-items: center;
   transition: all 0.2s ease;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   
   &:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.25);
+    background: ${blockTheme.pastelPink};
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
   }
 `;
 
@@ -167,44 +190,52 @@ const JudgeInfo = styled.div`
 
 const JudgeDisplayName = styled.div`
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: ${blockTheme.darkText};
   font-size: 0.95rem;
 `;
 
 const JudgeAddress = styled.div`
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: ${blockTheme.textMuted};
   font-family: monospace;
 `;
 
 const RemoveJudgeButton = styled.button`
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: ${blockTheme.pastelCoral};
+  border: 3px solid ${blockTheme.error};
   border-radius: 8px;
-  color: #ff6b6b;
+  color: ${blockTheme.darkText};
   padding: 0.5rem;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
   
   &:hover {
-    background: rgba(239, 68, 68, 0.3);
-    border-color: rgba(239, 68, 68, 0.6);
+    background: ${blockTheme.error};
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0px ${blockTheme.shadowDark};
+  }
+  
+  &:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px ${blockTheme.shadowDark};
   }
 `;
 
 const DecisionTypeSection = styled.div`
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: ${blockTheme.pastelPeach};
+  border: 3px solid ${blockTheme.darkText};
   border-radius: 16px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
 `;
 
 const DecisionTypeTitle = styled.h3`
   font-size: 1rem;
   font-weight: 600;
   margin: 0 0 1rem 0;
-  color: rgba(255, 255, 255, 0.9);
+  color: ${blockTheme.darkText};
 `;
 
 const RadioGroup = styled.div`
@@ -222,15 +253,17 @@ const RadioOption = styled.label<{ $selected: boolean }>`
   cursor: pointer;
   transition: all 0.2s ease;
   background: ${({ $selected }) => 
-    $selected ? 'rgba(102, 126, 234, 0.15)' : 'rgba(255, 255, 255, 0.02)'};
-  border: 1px solid ${({ $selected }) => 
-    $selected ? 'rgba(102, 126, 234, 0.4)' : 'rgba(255, 255, 255, 0.1)'};
+    $selected ? blockTheme.pastelBlue : blockTheme.lightText};
+  border: 3px solid ${({ $selected }) => 
+    $selected ? blockTheme.info : blockTheme.darkText};
+  box-shadow: ${({ $selected }) => 
+    $selected ? `6px 6px 0px ${blockTheme.shadowDark}` : `4px 4px 0px ${blockTheme.shadowDark}`};
   
   &:hover {
     background: ${({ $selected }) => 
-      $selected ? 'rgba(102, 126, 234, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
-    border-color: ${({ $selected }) => 
-      $selected ? 'rgba(102, 126, 234, 0.5)' : 'rgba(255, 255, 255, 0.2)'};
+      $selected ? blockTheme.pastelBlue : blockTheme.pastelMint};
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
   }
 `;
 
@@ -245,25 +278,26 @@ const RadioContent = styled.div`
 
 const RadioTitle = styled.div`
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: ${blockTheme.darkText};
   margin-bottom: 0.25rem;
 `;
 
 const RadioDescription = styled.div`
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: ${blockTheme.textMuted};
   line-height: 1.4;
 `;
 
 const MajorityIndicator = styled.div`
-  background: rgba(102, 126, 234, 0.15);
-  border: 1px solid rgba(102, 126, 234, 0.3);
+  background: ${blockTheme.pastelBlue};
+  border: 2px solid ${blockTheme.info};
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
   font-size: 0.8rem;
-  color: rgba(102, 126, 234, 1);
+  color: ${blockTheme.darkText};
   font-weight: 600;
   margin-top: 0.5rem;
+  box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
 `;
 
 const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess }) => {
@@ -483,8 +517,8 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
   };
 
   return (
-    <GlassModal onClick={onClose}>
-      <GlassModalContent onClick={e => e.stopPropagation()}>
+    <BlockModal onClick={onClose}>
+      <BlockModalContent onClick={e => e.stopPropagation()}>
         <ModalHeader>
           <ModalTitle>Create New Game</ModalTitle>
           <CloseButton onClick={onClose}>
@@ -499,7 +533,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
         {transactionState !== 'idle' && (
           <InfoBox variant="warning">
             <TransactionStatus>
-              <LoadingSpinner />
+              <SimpleRetroLoader />
               <div className="status-text">
                 {getStatusText()}
                 {transactionHash && (
@@ -515,7 +549,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
         <form onSubmit={handleSubmit}>
           <FormGroup>
             <FormLabel>Buy-in Amount (ETH)</FormLabel>
-            <GlassInput
+            <BlockInput
               type="number"
               step="0.001"
               min="0.001"
@@ -528,14 +562,14 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
 
           <FormGroup>
             <FormLabel>Max Players</FormLabel>
-            <GlassSelect
+            <BlockSelect
               value={formData.maxPlayers}
               onChange={(e) => setFormData(prev => ({ ...prev, maxPlayers: parseInt(e.target.value) }))}
             >
               {[2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20].map(num => (
                 <option key={num} value={num}>{num} players</option>
               ))}
-            </GlassSelect>
+            </BlockSelect>
           </FormGroup>
 
           <DecisionTypeSection>
@@ -592,22 +626,22 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             </InfoBox>
             
             <JudgeInputRow>
-              <GlassInput
+              <BlockInput
                 placeholder="Enter username, ENS name, or wallet address"
                 value={judgeInput}
                 onChange={(e) => handleJudgeInputChange(e.target.value)}
                 style={{ flex: 1 }}
                 disabled={resolving}
               />
-              <GlassButton
+              <BlockButton
                 variant="secondary"
                 onClick={handleAddJudge}
                 disabled={!resolvedAddress || resolvedAddress.error || resolving}
                 type="button"
               >
-                {resolving ? <LoadingSpinner size="sm" /> : <Plus size={16} />}
+                {resolving ? <SimpleRetroLoader size="sm" /> : <Plus size={16} />}
                 Add
-              </GlassButton>
+              </BlockButton>
             </JudgeInputRow>
 
             <AnimatePresence mode="wait">
@@ -618,7 +652,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                 >
-                  <LoadingSpinner size="sm" />
+                  <SimpleRetroLoader size="sm" />
                   Resolving address...
                 </ResolvedAddressInfo>
               )}
@@ -676,7 +710,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             </InfoBox>
           )}
 
-          <GlassButton
+          <BlockButton
             type="submit"
             variant="primary"
             size="lg"
@@ -685,24 +719,24 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
             disabled={creating}
           >
             {creating ? (
-              <FlexContainer align="center" justify="center" gap="0.5rem">
-                <LoadingSpinner />
+              <FlexBlock align="center" justify="center" gap="0.5rem">
+                <SimpleRetroLoader />
                 {transactionState === 'submitting' && 'Submitting Transaction...'}
                 {transactionState === 'waiting' && 'Waiting for Confirmation...'}
                 {transactionState === 'extracting' && 'Extracting Game Code...'}
                 {transactionState === 'idle' && 'Creating Game...'}
-              </FlexContainer>
+              </FlexBlock>
             ) : (
-              <FlexContainer align="center" justify="center" gap="0.5rem">
+              <FlexBlock align="center" justify="center" gap="0.5rem">
                 <Plus size={20} />
                 Create Game
-              </FlexContainer>
+              </FlexBlock>
             )}
-          </GlassButton>
+          </BlockButton>
         </form>
         
-      </GlassModalContent>
-    </GlassModal>
+      </BlockModalContent>
+    </BlockModal>
   );
 };
 

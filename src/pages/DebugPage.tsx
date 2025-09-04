@@ -20,9 +20,9 @@ import {
   GlassCard, 
   GlassButton, 
   GlassInput,
-  FlexContainer, 
   LoadingSpinner 
 } from '../styles/glass';
+import { FlexBlock, blockTheme, mediumShadow } from '../styles/blocks';
 
 const PageContainer = styled.div`
   min-height: 100vh;
@@ -98,19 +98,36 @@ const RadioOption = styled.label<{ checked: boolean }>`
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600;
   transition: all 0.2s ease;
-  background: ${({ checked }) => checked ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
-  border: 1px solid ${({ checked }) => checked ? 'rgba(59, 130, 246, 0.5)' : 'rgba(255, 255, 255, 0.1)'};
-  color: ${({ checked }) => checked ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.7)'};
+  border: 3px solid ${blockTheme.darkText};
+  color: ${blockTheme.darkText};
+  ${mediumShadow}
+  
+  background: ${({ checked }) => checked ? blockTheme.pastelBlue : blockTheme.lightText};
   
   &:hover {
-    background: ${({ checked }) => checked ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255, 255, 255, 0.1)'};
-    border-color: ${({ checked }) => checked ? 'rgba(59, 130, 246, 0.6)' : 'rgba(255, 255, 255, 0.2)'};
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0px ${blockTheme.shadowDark};
+  }
+  
+  &:active {
+    transform: translate(1px, 1px);
+    box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
   }
   
   input {
     display: none;
+  }
+  
+  @media (max-width: 768px) {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+    box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
+    
+    &:hover {
+      box-shadow: 3px 3px 0px ${blockTheme.shadowDark};
+    }
   }
 `;
 
@@ -203,43 +220,44 @@ const GameHost = styled.p`
 `;
 
 const StatusBadge = styled.div<{ type: 'locked' | 'unlocked' | 'judge' | 'player' | 'completed' }>`
-  padding: 0.3rem 0.8rem;
+  padding: 0.4rem 0.8rem;
   border-radius: 8px;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.4rem;
+  border: 3px solid ${blockTheme.darkText};
+  color: ${blockTheme.darkText};
+  position: relative;
+  transition: all 0.2s ease;
+  ${mediumShadow}
+  
   background: ${({ type }) => {
     switch (type) {
-      case 'locked': return 'rgba(251, 191, 36, 0.15)';
-      case 'unlocked': return 'rgba(34, 197, 94, 0.15)';
-      case 'judge': return 'rgba(147, 51, 234, 0.15)';
-      case 'player': return 'rgba(59, 130, 246, 0.15)';
-      case 'completed': return 'rgba(34, 197, 94, 0.15)';
-      default: return 'rgba(255, 255, 255, 0.1)';
+      case 'locked': return blockTheme.pastelYellow;
+      case 'unlocked': return blockTheme.pastelMint;
+      case 'judge': return blockTheme.pastelLavender;
+      case 'player': return blockTheme.pastelBlue;
+      case 'completed': return blockTheme.pastelMint;
+      default: return blockTheme.pastelPink;
     }
   }};
-  border: 1px solid ${({ type }) => {
-    switch (type) {
-      case 'locked': return 'rgba(245, 158, 11, 0.3)';
-      case 'unlocked': return 'rgba(34, 197, 94, 0.3)';
-      case 'judge': return 'rgba(147, 51, 234, 0.3)';
-      case 'player': return 'rgba(59, 130, 246, 0.3)';
-      case 'completed': return 'rgba(34, 197, 94, 0.3)';
-      default: return 'rgba(255, 255, 255, 0.2)';
+  
+  &:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0px ${blockTheme.shadowDark};
+  }
+  
+  @media (max-width: 768px) {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.7rem;
+    box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
+    
+    &:hover {
+      box-shadow: 3px 3px 0px ${blockTheme.shadowDark};
     }
-  }};
-  color: ${({ type }) => {
-    switch (type) {
-      case 'locked': return 'rgba(245, 158, 11, 0.9)';
-      case 'unlocked': return 'rgba(34, 197, 94, 0.9)';
-      case 'judge': return 'rgba(147, 51, 234, 0.9)';
-      case 'player': return 'rgba(59, 130, 246, 0.9)';
-      case 'completed': return 'rgba(34, 197, 94, 0.9)';
-      default: return 'rgba(255, 255, 255, 0.8)';
-    }
-  }};
+  }
 `;
 
 const GameStats = styled.div`
@@ -473,9 +491,9 @@ export default function DebugPage() {
         </StatsRow>
 
         {loading ? (
-          <FlexContainer justify="center" align="center" style={{ minHeight: '200px' }}>
+          <FlexBlock justify="center" align="center" style={{ minHeight: '200px' }}>
             <LoadingSpinner />
-          </FlexContainer>
+          </FlexBlock>
         ) : (
           <>
             <GamesGrid>
@@ -497,7 +515,7 @@ export default function DebugPage() {
                         <GameHost>Host: {getDisplayNameByAddressSync(game.host)}</GameHost>
                       </div>
                       
-                      <FlexContainer direction="column" gap="0.5rem" align="flex-end">
+                      <FlexBlock direction="column" gap="0.5rem" align="flex-end">
                         {game.isCompleted && (
                           <StatusBadge type="completed">COMPLETE</StatusBadge>
                         )}
@@ -517,7 +535,7 @@ export default function DebugPage() {
                           {game.hasJudges ? <Scale size={11} /> : <Users size={11} />}
                           {game.hasJudges ? 'Judge' : 'Player'} Vote
                         </StatusBadge>
-                      </FlexContainer>
+                      </FlexBlock>
                     </GameHeader>
 
                     <GameStats>

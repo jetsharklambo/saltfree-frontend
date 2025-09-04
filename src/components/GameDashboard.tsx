@@ -4,18 +4,23 @@ import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { readContract } from 'thirdweb';
 import toast from 'react-hot-toast';
-import { Plus, Users, Clock, Lock, RefreshCw, Search, Trophy, Share2, Copy, Check } from 'lucide-react';
+import { Plus, Users, Clock, Lock, RefreshCw, Search, Trophy, Share2, Copy, Check, ExternalLink } from 'lucide-react';
 import { getGameContract, formatAddress, formatEth, decodeStringFromHex } from '../thirdweb';
 import { getDisplayNameByAddress, getDisplayNameByAddressSync, preloadUsernames, preloadDisplayNames } from '../utils/userUtils';
 import { ensCache } from '../utils/ensUtils';
 import { 
-  GlassCard, 
-  GlassButton, 
-  GlassInput,
-  FlexContainer, 
-  LoadingSpinner,
-  glassTheme 
-} from '../styles/glass';
+  Block, 
+  BlockButton, 
+  BlockInput,
+  FlexBlock, 
+  blockTheme,
+  blockMedia,
+  BlockGrid,
+  PixelText,
+  mediumShadow
+} from '../styles/blocks';
+import { SimpleRetroLoader } from './RetroLoader';
+import { generateCompactASCII, generateRetroFrame } from '../utils/asciiArt';
 import styled from '@emotion/styled';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameData } from '../contexts/GameDataContext';
@@ -74,127 +79,253 @@ const DashboardContainer = styled.div`
   margin: 0 auto;
 `;
 
-const WelcomeSection = styled.div`
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  padding: 2rem;
+const WelcomeSection = styled(Block)`
   text-align: center;
   margin-bottom: 2.5rem;
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: ${blockTheme.pastelBlue};
 `;
 
-const GamesGrid = styled.div`
-  display: grid;
-  gap: 2rem;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  padding: 1rem 0;
+// CRT Marquee Display Components
+const CRTContainer = styled.div`
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto 2rem auto;
+  padding: 0 2rem;
+`;
+
+const CRTDisplay = styled.div`
+  background: ${blockTheme.pastelLavender};
+  border: 8px solid ${blockTheme.darkText};
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 
+    inset 0 0 20px rgba(0, 0, 0, 0.1),
+    0 4px 20px rgba(0, 0, 0, 0.2),
+    8px 8px 0px ${blockTheme.shadowDark};
+  position: relative;
   
-  @media (max-width: 768px) {
-    gap: 1.5rem;
-    grid-template-columns: 1fr;
+  /* CRT bezel styling with pastel colors */
+  &::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    background: linear-gradient(145deg, ${blockTheme.pastelPeach}, ${blockTheme.pastelPink});
+    border-radius: 24px;
+    z-index: -1;
   }
 `;
 
-const GameCard = styled(motion.div, {
+const CRTScreen = styled.div`
+  background: #0a0a0a;
+  border: 4px solid ${blockTheme.darkText};
+  border-radius: 12px;
+  height: 160px;
+  position: relative;
+  overflow: hidden;
+  
+  /* CRT screen curvature effect */
+  transform: perspective(800px) rotateX(2deg);
+  
+  /* Screen glow */
+  box-shadow: 
+    inset 0 0 30px rgba(0, 255, 65, 0.1),
+    0 0 20px rgba(0, 255, 65, 0.05);
+  
+  /* Scan lines */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 255, 65, 0.03) 2px,
+      rgba(0, 255, 65, 0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 2;
+  }
+  
+  /* CRT flicker animation */
+  animation: crt-flicker 3s infinite;
+  
+  @keyframes crt-flicker {
+    0%, 96%, 100% { 
+      opacity: 1; 
+      filter: brightness(1);
+    }
+    97% { 
+      opacity: 0.98; 
+      filter: brightness(0.95);
+    }
+    98% {
+      opacity: 0.99;
+      filter: brightness(1.02);
+    }
+    99% { 
+      opacity: 0.97; 
+      filter: brightness(0.98);
+    }
+  }
+`;
+
+const ScrollingContent = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-align: center;
+  
+  animation: scroll-back-forth 8s ease-in-out infinite alternate;
+  
+  @keyframes scroll-back-forth {
+    0% {
+      transform: translate(-50%, -50%) translateX(-50%);
+    }
+    100% {
+      transform: translate(-50%, -50%) translateX(50%);
+    }
+  }
+`;
+
+const ScrollingTitle = styled.div`
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  font-size: 0.7rem;
+  white-space: pre;
+  line-height: 0.9;
+  
+  /* Rainbow color animation */
+  background: linear-gradient(
+    90deg,
+    #ff0080 0%,
+    #ff8000 16.66%,
+    #ffff00 33.33%,
+    #80ff00 50%,
+    #00ff80 66.66%,
+    #0080ff 83.33%,
+    #8000ff 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  
+  /* Constantly changing rainbow animation */
+  animation: rainbow-flow 3s linear infinite;
+  
+  /* Glowing text shadow with rainbow effect */
+  filter: drop-shadow(0 0 8px #ff0080) 
+          drop-shadow(0 0 12px #00ff80) 
+          drop-shadow(0 0 16px #0080ff);
+  
+  @keyframes rainbow-flow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+`;
+
+const ScrollingSubtitle = styled.div`
+  font-family: 'Courier New', monospace;
+  font-weight: normal;
+  font-size: 1.3rem;
+  white-space: nowrap;
+  opacity: 0.85;
+  letter-spacing: 1px;
+  text-align: center;
+  
+  /* Subtle rainbow effect for subtitle */
+  background: linear-gradient(
+    90deg,
+    #8000ff 0%,
+    #0080ff 25%,
+    #00ff80 50%,
+    #ff8000 75%,
+    #ff0080 100%
+  );
+  background-size: 150% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  
+  /* Slower rainbow animation for contrast */
+  animation: rainbow-flow-slow 4s linear infinite;
+  
+  /* Subtle glow */
+  filter: drop-shadow(0 0 4px #0080ff) 
+          drop-shadow(0 0 6px #ff0080);
+  
+  @keyframes rainbow-flow-slow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 150% 50%; }
+  }
+`;
+
+const GamesGrid = styled(BlockGrid)`
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  padding: 1rem 0;
+  gap: 2rem;
+`;
+
+const PagerDevice = styled(motion.div, {
   shouldForwardProp: (prop) => !['$isWinner', '$isCompleted', '$isUserHost'].includes(prop),
 })<{ 
   $isWinner?: boolean; 
   $isCompleted?: boolean;
   $isUserHost?: boolean;
 }>`
-  background: ${({ $isWinner, $isCompleted }) => {
-    if ($isWinner) return 'rgba(255, 215, 0, 0.15)';
-    if ($isCompleted) return 'rgba(0, 0, 0, 0.5)';
-    return 'rgba(0, 0, 0, 0.4)';
-  }};
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1.5px solid ${({ $isWinner, $isCompleted }) => {
-    if ($isWinner) return 'rgba(255, 215, 0, 0.5)';
-    if ($isCompleted) return 'rgba(255, 255, 255, 0.1)';
-    return 'rgba(255, 255, 255, 0.15)';
-  }};
-  border-radius: 20px;
-  padding: 1.5rem;
-  box-shadow: ${({ $isWinner, $isCompleted }) => {
-    if ($isWinner) return `
-      0 8px 32px rgba(255, 215, 0, 0.25),
-      0 0 40px rgba(255, 215, 0, 0.15),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 0 0 1px rgba(255, 255, 255, 0.05)
-    `;
-    if ($isCompleted) return `
-      0 8px 32px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 0 0 1px rgba(255, 255, 255, 0.03)
-    `;
-    return `
-      0 8px 32px rgba(0, 0, 0, 0.35),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 0 0 1px rgba(255, 255, 255, 0.05)
-    `;
-  }};
+  background: linear-gradient(145deg, #e6e6e6, #b8b8b8);
+  border: 4px solid ${blockTheme.darkText};
+  border-radius: 12px;
+  padding: 0.25rem;
+  box-shadow: 8px 8px 0px ${blockTheme.shadowDark};
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   position: relative;
+  color: ${blockTheme.darkText};
+  font-weight: 600;
   
   ${({ $isWinner }) => $isWinner && `
-    animation: winner-glow 4s ease-in-out infinite;
+    background: linear-gradient(145deg, #fff3cd, #d1a827);
+    animation: winner-glow 2s ease-in-out infinite;
     
     @keyframes winner-glow {
       0%, 100% { 
-        box-shadow: 
-          0 8px 32px rgba(255, 215, 0, 0.2),
-          0 0 40px rgba(255, 215, 0, 0.1),
-          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        box-shadow: 8px 8px 0px ${blockTheme.shadowDark}, 0 0 20px ${blockTheme.success};
       }
       50% { 
-        box-shadow: 
-          0 12px 40px rgba(255, 215, 0, 0.3),
-          0 0 60px rgba(255, 215, 0, 0.15),
-          inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        box-shadow: 8px 8px 0px ${blockTheme.shadowDark}, 0 0 30px ${blockTheme.success};
       }
     }
   `}
   
   &:hover {
-    transform: ${({ $isWinner }) => $isWinner ? 'translateY(-6px) scale(1.02)' : 'translateY(-4px)'};
-    background: ${({ $isWinner, $isCompleted }) => {
-      if ($isWinner) return 'rgba(255, 215, 0, 0.18)';
-      if ($isCompleted) return 'rgba(156, 163, 175, 0.12)';
-      return 'rgba(255, 255, 255, 0.15)';
-    }};
-    border-color: ${({ $isWinner, $isCompleted }) => {
-      if ($isWinner) return 'rgba(255, 215, 0, 0.6)';
-      if ($isCompleted) return 'rgba(156, 163, 175, 0.4)';
-      return 'rgba(255, 255, 255, 0.3)';
-    }};
-    box-shadow: ${({ $isWinner, $isCompleted }) => {
-      if ($isWinner) return `
-        0 20px 60px rgba(255, 215, 0, 0.3),
-        0 0 80px rgba(255, 215, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.4)
-      `;
-      if ($isCompleted) return `
-        0 16px 48px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2)
-      `;
-      return `
-        0 16px 48px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 rgba(255, 255, 255, 0.3)
-      `;
-    }};
+    transform: translate(-2px, -2px);
+    box-shadow: 10px 10px 0px ${blockTheme.shadowDark};
+    background: linear-gradient(145deg, #f0f0f0, #c8c8c8);
+  }
+  
+  &:active {
+    transform: translate(2px, 2px);
+    box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   }
   
   @media (max-width: 768px) {
-    padding: 1rem;
-    border-radius: 12px;
+    padding: 0.375rem;
+    border-radius: 10px;
   }
 `;
 
@@ -214,7 +345,7 @@ const GameCodeTitle = styled.h3`
   transition: color 0.2s;
   
   &:hover {
-    color: ${glassTheme.primary};
+    color: ${blockTheme.retroBlue};
   }
 `;
 
@@ -227,27 +358,32 @@ const GameStats = styled.div`
 `;
 
 const GameBadge = styled.div<{ variant: 'host' | 'player' | 'judge-eligible' }>`
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 3px solid ${blockTheme.darkText};
+  color: ${blockTheme.darkText};
+  transition: all 0.2s ease;
+  ${mediumShadow}
+  
   background: ${({ variant }) => {
     switch (variant) {
       case 'host':
-        return 'linear-gradient(135deg, rgba(102, 126, 234, 0.9), rgba(118, 75, 162, 0.9))';
+        return blockTheme.pastelLavender;
       case 'player':
-        return 'linear-gradient(135deg, rgba(81, 207, 102, 0.9), rgba(64, 192, 87, 0.9))';
+        return blockTheme.pastelMint;
       case 'judge-eligible':
-        return 'linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.9))';
+        return blockTheme.pastelBlue;
       default:
-        return 'linear-gradient(135deg, rgba(81, 207, 102, 0.9), rgba(64, 192, 87, 0.9))';
+        return blockTheme.pastelMint;
     }
   }};
-  color: white;
-  padding: 0.4rem 0.9rem;
-  border-radius: 14px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  
+  &:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0px ${blockTheme.shadowDark};
+  }
 `;
 
 const SectionHeader = styled.div`
@@ -259,21 +395,14 @@ const SectionTitle = styled.h2`
   font-size: 2rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), ${glassTheme.primary});
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: ${blockTheme.retroPurple};
+  text-shadow: 2px 2px 0px ${blockTheme.shadowDark};
 `;
 
-const EmptyState = styled.div`
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
+const EmptyState = styled(Block)`
   text-align: center;
   padding: 3rem 2rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  background: ${blockTheme.pastelMint};
   
   .emoji {
     font-size: 4rem;
@@ -284,14 +413,176 @@ const EmptyState = styled.div`
   h3 {
     font-size: 1.5rem;
     margin-bottom: 0.5rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: ${blockTheme.darkText};
   }
   
   p {
-    color: rgba(255, 255, 255, 0.6);
+    color: ${blockTheme.darkText};
     font-size: 1rem;
+    opacity: 0.8;
   }
 `;
+
+
+const PagerDisplay = styled.div`
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  line-height: 1;
+  text-align: center;
+  margin: 0;
+  padding: 1rem;
+  background: #000;
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 8px;
+  white-space: pre;
+  font-size: 0.5rem;
+  color: #00ff41;
+  overflow: visible;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 
+    inset 0 0 10px rgba(0, 255, 65, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.5);
+  position: relative;
+  min-height: 2.5rem;
+  
+  /* Pager LCD scan lines */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 255, 65, 0.08) 1px,
+      rgba(0, 255, 65, 0.08) 2px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+  
+  /* Message received animation */
+  animation: messageReceived 3s ease-in-out infinite;
+  
+  @keyframes messageReceived {
+    0%, 85% { 
+      color: #00ff41;
+      text-shadow: 0 0 5px #00ff41;
+    }
+    86%, 90% { 
+      color: #00ff88;
+      text-shadow: 0 0 10px #00ff88;
+    }
+    91%, 95% { 
+      color: #00ff41;
+      text-shadow: 0 0 5px #00ff41;
+    }
+    96%, 100% { 
+      color: #00ff88;
+      text-shadow: 0 0 10px #00ff88;
+    }
+  }
+  
+  &:hover {
+    animation-play-state: paused;
+    color: #00ff88;
+    box-shadow: 
+      inset 0 0 15px rgba(0, 255, 65, 0.4),
+      0 2px 8px rgba(0, 0, 0, 0.6);
+  }
+  
+  &:active {
+    color: #00cc33;
+  }
+  
+  ${blockMedia.mobile} {
+    font-size: 0.45rem;
+    padding: 1.25rem 0.75rem;
+    min-height: 4rem;
+  }
+`;
+
+
+
+// Generate "SALT FREE" ASCII art using seven-segment display (custom for longer text)
+const generateSaltFreeASCII = (): string => {
+  // Seven segment display characters (like digital clock/pager)
+  const displayLetters: { [key: string]: string[] } = {
+    'S': [
+      ' ████',
+      '█    ',
+      ' ███ ',
+      '    █',
+      '████ '
+    ],
+    'A': [
+      ' ███ ',
+      '█   █',
+      '█████',
+      '█   █',
+      '█   █'
+    ],
+    'L': [
+      '█    ',
+      '█    ',
+      '█    ',
+      '█    ',
+      '█████'
+    ],
+    'T': [
+      '█████',
+      '  █  ',
+      '  █  ',
+      '  █  ',
+      '  █  '
+    ],
+    'F': [
+      '█████',
+      '█    ',
+      '████ ',
+      '█    ',
+      '█    '
+    ],
+    'R': [
+      '████ ',
+      '█   █',
+      '████ ',
+      '█  █ ',
+      '█   █'
+    ],
+    'E': [
+      '█████',
+      '█    ',
+      '████ ',
+      '█    ',
+      '█████'
+    ],
+    ' ': [
+      '     ',
+      '     ',
+      '     ',
+      '     ',
+      '     '
+    ]
+  };
+
+  const text = 'SALT FREE';
+  const characters = text.split('');
+  const lines: string[] = ['', '', '', '', ''];
+  
+  characters.forEach((char, index) => {
+    const asciiChar = displayLetters[char] || displayLetters[' '];
+    asciiChar.forEach((line, lineIndex) => {
+      lines[lineIndex] += line + (index < characters.length - 1 ? '  ' : '');
+    });
+  });
+  
+  return lines.join('\n');
+};
 
 const GameDashboard: React.FC<GameDashboardProps> = ({ 
   filter, 
@@ -315,27 +606,41 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
   const [isShareDashboardCopied, setIsShareDashboardCopied] = useState(false);
   const [unanimousJudgesCache, setUnanimousJudgesCache] = useState<Map<string, string[]>>(new Map());
 
-  // Filter games based on URL filter only
-  const filteredGames = games.filter(game => {
-    // Apply URL-based filter first
-    if (filter === 'active') {
-      // Active games are: not locked, not completed, and not full
-      return !game.isLocked && !game.isCompleted && game.playerCount < game.maxPlayers;
-    }
-    if (filter === 'mine' && account?.address) {
-      // User's games are where they are host or player
-      const userAddress = account.address.toLowerCase();
-      return game.host?.toLowerCase() === userAddress ||
-             game.players?.some(p => p?.toLowerCase() === userAddress);
-    }
-    
-    return true; // Show all games by default
-  });
+  // Filter games and deduplicate by game code
+  const filteredGames = games
+    .filter(game => {
+      // Apply URL-based filter first
+      if (filter === 'active') {
+        // Active games are: not locked, not completed, and not full
+        return !game.isLocked && !game.isCompleted && game.playerCount < game.maxPlayers;
+      }
+      if (filter === 'mine' && account?.address) {
+        // User's games are where they are host or player
+        const userAddress = account.address.toLowerCase();
+        return game.host?.toLowerCase() === userAddress ||
+               game.players?.some(p => p?.toLowerCase() === userAddress);
+      }
+      
+      return true; // Show all games by default
+    })
+    // Remove duplicates by game code, keep the most recent one
+    .reduce((unique: any[], game: any) => {
+      const existingIndex = unique.findIndex(g => g.code === game.code);
+      if (existingIndex === -1) {
+        unique.push(game);
+      } else {
+        // Keep the one with the higher block number (more recent)
+        if (game.blockNumber > unique[existingIndex].blockNumber) {
+          unique[existingIndex] = game;
+        }
+      }
+      return unique;
+    }, []);
 
-  // Debug: log games state changes and fetch judges for new games
+  // Debug: log games state changes and fetch judges for new games - force reload
   useEffect(() => {
-    console.log(`🎮 GameDashboard games state updated:`, games);
-    console.log(`🎮 Games count: ${games.length}`);
+    console.log(`GameDashboard games state updated:`, games);
+    console.log(`Games count: ${games.length}`);
     
     // Fetch unanimous judges for new games
     games.forEach(game => {
@@ -436,7 +741,7 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
     blockNumber?: number 
   }) => {
     setShowCreateModal(false);
-    console.log('🎮 Game created successfully:', {
+    console.log('Game created successfully:', {
       gameCode: gameData.gameCode,
       buyIn: gameData.buyIn,
       maxPlayers: gameData.maxPlayers,
@@ -469,13 +774,13 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
                   addFoundGame(newStatus.gameCode, account.address)
                     .then(() => {
                       toast.success(
-                        `🎮 Game ${newStatus.gameCode} added to dashboard!`,
+                        `Game ${newStatus.gameCode} added to dashboard!`,
                         { duration: 5000 }
                       );
                     })
                     .catch(() => {
                       toast.success(
-                        `🎮 Game ${newStatus.gameCode} is ready! Use "Find Game" to add it.`,
+                        `Game ${newStatus.gameCode} is ready! Use "Find Game" to add it.`,
                         { duration: 8000 }
                       );
                     });
@@ -531,14 +836,14 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
         
         const getStatusEmoji = () => {
           switch (status.status) {
-            case 'pending': return '⏳';
-            case 'confirming': return '🔄';
-            case 'confirmed': return '✅';
-            case 'extracting': return '🔍';
-            case 'complete': return '🎮';
-            case 'failed': return '❌';
-            case 'timeout': return '⏰';
-            default: return '⏳';
+            case 'pending': return '[...]';
+            case 'confirming': return '[~]';
+            case 'confirmed': return '[✓]';
+            case 'extracting': return '[?]';
+            case 'complete': return '[•]';
+            case 'failed': return '[X]';
+            case 'timeout': return '[T]';
+            default: return '[.]';
           }
         };
         
@@ -633,7 +938,7 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
       (t) => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-            🎮 Game Created!
+            Game Created!
           </div>
           <div style={{ 
             fontFamily: 'Monaco, monospace', 
@@ -713,7 +1018,7 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
             Connect your wallet for salt-free gaming and payouts.
           </p>
           <div className="emoji">
-            🎲🃏♠️♥️
+            ◆ ♠ ♥ ♦ ♣
           </div>
         </WelcomeSection>
       </DashboardContainer>
@@ -744,13 +1049,30 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
         <meta name="twitter:description" content={shareDescription} />
         <meta name="twitter:image" content={`${window.location.origin}/saltfree-social.png`} />
       </Helmet>
+      
+      {/* CRT Marquee Display */}
+      <CRTContainer>
+        <CRTDisplay>
+          <CRTScreen>
+            <ScrollingContent>
+              <ScrollingTitle>
+                {generateSaltFreeASCII()}
+              </ScrollingTitle>
+              <ScrollingSubtitle>
+                don't let salty degens get you down
+              </ScrollingSubtitle>
+            </ScrollingContent>
+          </CRTScreen>
+        </CRTDisplay>
+      </CRTContainer>
+      
       <DashboardContainer>
       {/* Welcome Section */}
       <WelcomeSection>
         <SectionTitle>
-          {user?.username ? `Welcome back, ${user.username}! 🎉` : 'Welcome back! 🎉'}
+          {user?.username ? `Welcome back, ${user.username}!` : 'Welcome back!'}
         </SectionTitle>
-        <FlexContainer direction="column" align="center" gap="0.5rem" style={{ marginBottom: '2rem' }}>
+        <FlexBlock direction="column" align="center" gap="0.5rem" style={{ marginBottom: '2rem' }}>
           {user?.username ? (
             <p style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.6)', margin: 0 }}>
               Connected as {getDisplayNameByAddressSync(account.address)}
@@ -760,32 +1082,32 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
               Connected as {getDisplayNameByAddressSync(account.address)}
             </p>
           )}
-        </FlexContainer>
-        <FlexContainer justify="center" gap="1rem" style={{ marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-          <GlassButton 
+        </FlexBlock>
+        <FlexBlock justify="center" gap="1rem" style={{ marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          <BlockButton 
             onClick={() => setShowFindModal(true)}
             size="lg"
           >
             <Search size={20} />
             Find
-          </GlassButton>
-          <GlassButton 
+          </BlockButton>
+          <BlockButton 
             variant="secondary"
             onClick={() => setShowCreateModal(true)}
             size="lg"
           >
             <Plus size={20} />
             Create Game
-          </GlassButton>
-          <GlassButton 
+          </BlockButton>
+          <BlockButton 
             variant="secondary"
             onClick={() => setShowJoinModal(true)}
             size="lg"
           >
             <Users size={20} />
             Join with Code
-          </GlassButton>
-          <GlassButton 
+          </BlockButton>
+          <BlockButton 
             variant="secondary"
             onClick={() => account && fetchRecentGames(account.address)}
             $loading={loading}
@@ -793,18 +1115,18 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
           >
             <RefreshCw size={16} />
             Load My Games
-          </GlassButton>
-        </FlexContainer>
+          </BlockButton>
+        </FlexBlock>
         
         {/* User Dropdown Menu - Positioned as part of the main actions */}
-        <FlexContainer justify="center">
+        <FlexBlock justify="center">
           <UserDropdown
             onEditUsername={() => setShowUsernameModal(true)}
             onGameLists={() => setShowGameListsModal(true)}
             onGameHistory={() => setShowHistoryModal(true)}
             walletAddress={account.address}
           />
-        </FlexContainer>
+        </FlexBlock>
       </WelcomeSection>
 
       {error && (
@@ -830,15 +1152,15 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
         </p>
         
         {/* Share Games Button */}
-        <FlexContainer justify="center" gap="0.5rem" style={{ marginBottom: '1rem' }}>
-          <GlassButton
+        <FlexBlock justify="center" gap="0.5rem" style={{ marginBottom: '1rem' }}>
+          <BlockButton
             variant="secondary"
             onClick={handleShareDashboard}
             disabled={games.length === 0}
             style={{
               padding: '0.5rem 1rem',
               fontSize: '0.875rem',
-              background: isShareDashboardCopied ? glassTheme.success : 'rgba(255, 255, 255, 0.05)'
+              background: isShareDashboardCopied ? blockTheme.success : blockTheme.pastelLavender
             }}
             title={`Share top ${Math.min(5, games.length)} games`}
           >
@@ -853,33 +1175,33 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
                 Share Games
               </>
             )}
-          </GlassButton>
-        </FlexContainer>
+          </BlockButton>
+        </FlexBlock>
       </SectionHeader>
       
       {loading ? (
-        <GlassCard style={{ textAlign: 'center', padding: '3rem' }}>
-          <LoadingSpinner />
+        <Block style={{ textAlign: 'center', padding: '3rem' }}>
+          <SimpleRetroLoader />
           <p style={{ marginTop: '1rem', color: 'rgba(255, 255, 255, 0.8)' }}>Loading games...</p>
-        </GlassCard>
+        </Block>
       ) : (() => {
-        console.log(`🎮 RENDER: filteredGames.length = ${filteredGames.length}, filteredGames =`, filteredGames);
+        console.log(`RENDER: filteredGames.length = ${filteredGames.length}, filteredGames =`, filteredGames);
         return filteredGames.length === 0;
       })() ? (
         <EmptyState>
-          <div className="emoji">{games.length === 0 ? '🔍' : '🎯'}</div>
+          <div className="emoji">{games.length === 0 ? '[?]' : '[•]'}</div>
           <h3>{games.length === 0 ? 'No games loaded yet' : `No ${gameFilter === 'all' ? '' : gameFilter} games found`}</h3>
           <p>{games.length === 0 ? 'Start by searching for a game to join, or create your own game!' : `You don't have any ${gameFilter === 'all' ? '' : gameFilter} games. Try a different filter or create a new game.`}</p>
-          <FlexContainer justify="center" gap="1rem" style={{ marginTop: '1.5rem' }}>
-            <GlassButton onClick={() => setShowFindModal(true)}>
+          <FlexBlock justify="center" gap="1rem" style={{ marginTop: '1.5rem' }}>
+            <BlockButton onClick={() => setShowFindModal(true)}>
               <Search size={16} />
               Find Game
-            </GlassButton>
-            <GlassButton variant="secondary" onClick={() => setShowCreateModal(true)}>
+            </BlockButton>
+            <BlockButton variant="secondary" onClick={() => setShowCreateModal(true)}>
               <Plus size={16} />
               Create Game
-            </GlassButton>
-          </FlexContainer>
+            </BlockButton>
+          </FlexBlock>
         </EmptyState>
       ) : (
         <GamesGrid>
@@ -1030,8 +1352,8 @@ const ModernGameCard: React.FC<{
   const canJoin = !isHost && !hasJoined && 
                   (game.playerCount || 0) < (game.maxPlayers || 0) && onJoinGame;
 
-  // Winner status checks
-  const isUserWinner = game.isUserWinner || false;
+  // Winner status checks - only show as winner if they actually have a prize
+  const isUserWinner = (game.isUserWinner && game.userHasActualPrize !== false) || false;
   const winningsClaimed = game.winningsClaimed || game.hasUserClaimedWinnings || false;
   const isCompleted = game.isCompleted || winningsClaimed;
 
@@ -1073,8 +1395,15 @@ const ModernGameCard: React.FC<{
     }
   };
 
+  const handleOpenInNewTab = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareUrl = `${window.location.origin}/game/${gameCode}`;
+    window.open(shareUrl, '_blank', 'noopener,noreferrer');
+  };
+
+
   return (
-    <GameCard
+    <PagerDevice
       onClick={onClick}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -1086,45 +1415,72 @@ const ModernGameCard: React.FC<{
       $isCompleted={isCompleted}
       $isUserHost={isHost}
     >
+      
       <GameHeader>
-        <div>
-          <FlexContainer align="center" gap="0.5rem">
-            <GameCodeTitle 
+        <FlexBlock align="flex-start" gap="1rem">
+          {/* Pager section with screen and details button */}
+          <FlexBlock direction="column" gap="0.5rem">
+            {/* ASCII Art Game Code */}
+            <PagerDisplay 
               onClick={handleCopyGameCode}
               title="Click to copy game code"
             >
-              {gameCode}
-            </GameCodeTitle>
+              {generateCompactASCII(gameCode)}
+            </PagerDisplay>
+            
+            {/* Full-width Details button */}
+            <BlockButton
+              size="sm"
+              onClick={onClick}
+              title="View game details"
+              style={{ 
+                width: '100%',
+                padding: '0.375rem 0.75rem'
+              }}
+            >
+              DETAILS
+            </BlockButton>
+          </FlexBlock>
+          
+          {/* Block-style action buttons */}
+          <FlexBlock direction="column" gap="0.5rem">
             {isShareCopied ? (
-              <Check 
-                size={16} 
+              <BlockButton
+                size="sm"
                 onClick={handleShareClick}
                 title="Link copied!"
                 style={{ 
-                  cursor: 'pointer', 
-                  color: glassTheme.success,
-                  transition: 'all 0.2s ease',
-                  transform: 'scale(1.1)'
+                  backgroundColor: blockTheme.success,
+                  minWidth: '60px'
                 }}
-              />
+              >
+                <Check size={14} />
+                COPIED
+              </BlockButton>
             ) : (
-              <Share2 
-                size={16} 
+              <BlockButton
+                size="sm"
                 onClick={handleShareClick}
                 title="Share game link"
-                style={{ 
-                  cursor: 'pointer', 
-                  color: 'rgba(255, 255, 255, 0.6)', 
-                  transition: 'color 0.2s ease',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 1)'}
-                onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)'}
-              />
+                style={{ minWidth: '60px' }}
+              >
+                <Share2 size={14} />
+                SHARE
+              </BlockButton>
             )}
-          </FlexContainer>
-        </div>
+            <BlockButton
+              size="sm"
+              onClick={handleOpenInNewTab}
+              title="Open in new tab"
+              style={{ minWidth: '60px' }}
+            >
+              <ExternalLink size={14} />
+              OPEN
+            </BlockButton>
+          </FlexBlock>
+        </FlexBlock>
         
-        <FlexContainer direction="column" align="flex-end" gap="0.5rem">
+        <FlexBlock direction="column" align="flex-end" gap="0.5rem">
           {/* Winner badges - highest priority */}
           {isUserWinner && !winningsClaimed && (
             <TrophyBadge size="sm" showSparkles={true}>
@@ -1157,29 +1513,9 @@ const ModernGameCard: React.FC<{
             <GameBadge variant="judge-eligible">⚖️ JUDGE ELIGIBLE</GameBadge>
           )}
           
-          {/* Join button - lowest priority */}
-          {canJoin && !isCompleted && (
-            <GlassButton
-              size="sm"
-              onClick={(e: React.MouseEvent) => {
-                e.stopPropagation();
-                onJoinGame && onJoinGame(gameCode); // Always join as player
-              }}
-              style={{
-                padding: '0.5rem 0.75rem',
-                fontSize: '0.85rem',
-                background: 'rgba(34, 197, 94, 0.2)',
-                border: '1px solid rgba(34, 197, 94, 0.4)',
-                color: 'rgba(255, 255, 255, 0.9)'
-              }}
-            >
-              <Users size={14} />
-              Join ({formatEth(game.buyIn || '0')} ETH)
-            </GlassButton>
-          )}
-        </FlexContainer>
+        </FlexBlock>
       </GameHeader>
-    </GameCard>
+    </PagerDevice>
   );
 };
 

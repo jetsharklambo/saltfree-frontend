@@ -4,13 +4,14 @@ import { useUser } from '../contexts/UserContext';
 import { databaseService } from '../services/databaseService';
 import { Database } from '../lib/database.types';
 import {
-  GlassModal,
-  GlassModalContent,
-  GlassButton,
-  GlassInput,
-  FlexContainer,
-  LoadingSpinner
-} from '../styles/glass';
+  BlockModal,
+  BlockModalContent,
+  BlockButton,
+  BlockInput,
+  blockTheme
+} from '../styles/blocks';
+import { SimpleRetroLoader } from './RetroLoader';
+import { FlexBlock } from '../styles/blocks';
 
 type GameList = Database['public']['Tables']['game_lists']['Row'];
 
@@ -116,61 +117,59 @@ export const GameListsModal: React.FC<GameListsModalProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   return (
-    <GlassModal>
-      <GlassModalContent style={{ maxWidth: '600px', maxHeight: '80vh', overflow: 'auto' }}>
-        <FlexContainer justify="space-between" align="center" style={{ marginBottom: '1.5rem' }}>
-          <FlexContainer align="center" gap="0.5rem">
-            <List size={24} style={{ color: 'rgba(139, 92, 246, 0.9)' }} />
+    <BlockModal>
+      <BlockModalContent style={{ maxWidth: '600px', maxHeight: '80vh', overflow: 'auto' }}>
+        <FlexBlock justify="space-between" align="center" style={{ marginBottom: '1.5rem' }}>
+          <FlexBlock align="center" gap="0.5rem">
+            <List size={24} style={{ color: blockTheme.accent }} />
             <h2 style={{ 
               margin: 0, 
               fontSize: '1.5rem', 
-              color: 'rgba(255, 255, 255, 0.9)',
+              color: blockTheme.darkText,
               fontWeight: '600'
             }}>
               My Game Lists
             </h2>
-          </FlexContainer>
-          <GlassButton 
+          </FlexBlock>
+          <BlockButton 
             onClick={handleClose}
+            color="pastelCoral"
             style={{ 
               padding: '0.5rem',
-              minWidth: 'auto',
-              background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.3)'
+              minWidth: 'auto'
             }}
           >
             <X size={18} />
-          </GlassButton>
-        </FlexContainer>
+          </BlockButton>
+        </FlexBlock>
 
         {error && (
           <div style={{ 
-            background: 'rgba(239, 68, 68, 0.1)', 
-            border: '1px solid rgba(239, 68, 68, 0.3)', 
+            background: blockTheme.pastelCoral, 
+            border: `3px solid ${blockTheme.error}`, 
             padding: '0.75rem', 
             borderRadius: '8px', 
             marginBottom: '1rem',
-            color: 'rgba(239, 68, 68, 0.9)'
+            color: blockTheme.darkText,
+            fontWeight: '600',
+            boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
           }}>
             {error}
           </div>
         )}
 
-        <FlexContainer justify="space-between" align="center" style={{ marginBottom: '1rem' }}>
-          <p style={{ color: 'rgba(255, 255, 255, 0.7)', margin: 0 }}>
+        <FlexBlock justify="space-between" align="center" style={{ marginBottom: '1rem' }}>
+          <p style={{ color: blockTheme.textMuted, margin: 0 }}>
             Create custom lists to organize your favorite games
           </p>
-          <GlassButton 
+          <BlockButton 
             onClick={() => setShowCreateForm(true)}
-            style={{ 
-              background: 'rgba(34, 197, 94, 0.1)',
-              border: '1px solid rgba(34, 197, 94, 0.3)'
-            }}
+            color="pastelMint"
           >
             <Plus size={16} style={{ marginRight: '0.5rem' }} />
             New List
-          </GlassButton>
-        </FlexContainer>
+          </BlockButton>
+        </FlexBlock>
 
         {showCreateForm && (
           <div style={{ 
@@ -182,22 +181,22 @@ export const GameListsModal: React.FC<GameListsModalProps> = ({ isOpen, onClose 
           }}>
             <h3 style={{ margin: '0 0 1rem 0', color: 'rgba(255, 255, 255, 0.9)' }}>Create New Game List</h3>
             
-            <GlassInput
+            <BlockInput
               placeholder="List name (required)"
               value={newList.name}
               onChange={(e) => setNewList({ ...newList, name: e.target.value })}
               style={{ marginBottom: '0.75rem' }}
             />
             
-            <GlassInput
+            <BlockInput
               placeholder="Description (optional)"
               value={newList.description}
               onChange={(e) => setNewList({ ...newList, description: e.target.value })}
               style={{ marginBottom: '1rem' }}
             />
             
-            <FlexContainer gap="0.75rem" justify="flex-end">
-              <GlassButton 
+            <FlexBlock gap="0.75rem" justify="flex-end">
+              <BlockButton 
                 onClick={() => {
                   setShowCreateForm(false);
                   setNewList({ name: '', description: '' });
@@ -208,8 +207,8 @@ export const GameListsModal: React.FC<GameListsModalProps> = ({ isOpen, onClose 
                 }}
               >
                 Cancel
-              </GlassButton>
-              <GlassButton 
+              </BlockButton>
+              <BlockButton 
                 onClick={handleCreateList}
                 disabled={!newList.name.trim()}
                 style={{ 
@@ -219,44 +218,45 @@ export const GameListsModal: React.FC<GameListsModalProps> = ({ isOpen, onClose 
               >
                 <Save size={16} style={{ marginRight: '0.5rem' }} />
                 Create List
-              </GlassButton>
-            </FlexContainer>
+              </BlockButton>
+            </FlexBlock>
           </div>
         )}
 
         {loading ? (
-          <FlexContainer justify="center" align="center" style={{ padding: '2rem' }}>
-            <LoadingSpinner size="2rem" />
-            <span style={{ marginLeft: '1rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+          <FlexBlock justify="center" align="center" style={{ padding: '2rem' }}>
+            <SimpleRetroLoader size="2rem" />
+            <span style={{ marginLeft: '1rem', color: blockTheme.textMuted }}>
               Loading game lists...
             </span>
-          </FlexContainer>
+          </FlexBlock>
         ) : gameLists.length === 0 ? (
-          <FlexContainer 
+          <FlexBlock 
             direction="column" 
             align="center" 
             justify="center" 
             style={{ padding: '3rem', textAlign: 'center' }}
           >
-            <GamepadIcon size={48} style={{ color: 'rgba(255, 255, 255, 0.3)', marginBottom: '1rem' }} />
-            <h3 style={{ color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 0.5rem 0' }}>
+            <GamepadIcon size={48} style={{ color: blockTheme.textMuted, marginBottom: '1rem' }} />
+            <h3 style={{ color: blockTheme.textSecondary, margin: '0 0 0.5rem 0' }}>
               No Game Lists Yet
             </h3>
-            <p style={{ color: 'rgba(255, 255, 255, 0.5)', margin: 0 }}>
+            <p style={{ color: blockTheme.textMuted, margin: 0 }}>
               Create your first list to start organizing games
             </p>
-          </FlexContainer>
+          </FlexBlock>
         ) : (
           <div>
             {gameLists.map((gameList) => (
               <div
                 key={gameList.id}
                 style={{
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: blockTheme.pastelLavender,
+                  border: `3px solid ${blockTheme.darkText}`,
                   borderRadius: '8px',
                   padding: '1rem',
                   marginBottom: '0.75rem',
+                  boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`,
                 }}
               >
                 {editingList === gameList.id ? (
@@ -266,52 +266,52 @@ export const GameListsModal: React.FC<GameListsModalProps> = ({ isOpen, onClose 
                     onCancel={() => setEditingList(null)}
                   />
                 ) : (
-                  <FlexContainer justify="space-between" align="flex-start">
+                  <FlexBlock justify="space-between" align="flex-start">
                     <div style={{ flex: 1 }}>
-                      <h4 style={{ margin: '0 0 0.5rem 0', color: 'rgba(255, 255, 255, 0.9)' }}>
+                      <h4 style={{ margin: '0 0 0.5rem 0', color: blockTheme.darkText }}>
                         {gameList.name}
                       </h4>
                       {gameList.description && (
-                        <p style={{ margin: '0 0 0.5rem 0', color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>
+                        <p style={{ margin: '0 0 0.5rem 0', color: blockTheme.textMuted, fontSize: '0.9rem' }}>
                           {gameList.description}
                         </p>
                       )}
-                      <p style={{ margin: 0, color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.8rem' }}>
+                      <p style={{ margin: 0, color: blockTheme.textMuted, fontSize: '0.8rem' }}>
                         {Array.isArray(gameList.game_codes) ? gameList.game_codes.length : 0} games
                       </p>
                     </div>
-                    <FlexContainer gap="0.5rem">
-                      <GlassButton
+                    <FlexBlock gap="0.5rem">
+                      <BlockButton
                         onClick={() => setEditingList(gameList.id)}
                         style={{
                           padding: '0.5rem',
                           minWidth: 'auto',
-                          background: 'rgba(59, 130, 246, 0.1)',
-                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                          background: blockTheme.pastelBlue,
+                          border: `3px solid ${blockTheme.darkText}`,
                         }}
                       >
                         <Edit size={16} />
-                      </GlassButton>
-                      <GlassButton
+                      </BlockButton>
+                      <BlockButton
                         onClick={() => handleDeleteList(gameList.id)}
                         style={{
                           padding: '0.5rem',
                           minWidth: 'auto',
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          background: blockTheme.pastelCoral,
+                          border: `3px solid ${blockTheme.error}`,
                         }}
                       >
                         <Trash2 size={16} />
-                      </GlassButton>
-                    </FlexContainer>
-                  </FlexContainer>
+                      </BlockButton>
+                    </FlexBlock>
+                  </FlexBlock>
                 )}
               </div>
             ))}
           </div>
         )}
-      </GlassModalContent>
-    </GlassModal>
+      </BlockModalContent>
+    </BlockModal>
   );
 };
 
@@ -336,40 +336,34 @@ const EditListForm: React.FC<EditListFormProps> = ({ gameList, onSave, onCancel 
 
   return (
     <div>
-      <GlassInput
+      <BlockInput
         value={name}
         onChange={(e) => setName(e.target.value)}
         style={{ marginBottom: '0.75rem' }}
         placeholder="List name"
       />
-      <GlassInput
+      <BlockInput
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         style={{ marginBottom: '1rem' }}
         placeholder="Description (optional)"
       />
-      <FlexContainer gap="0.75rem" justify="flex-end">
-        <GlassButton
+      <FlexBlock gap="0.75rem" justify="flex-end">
+        <BlockButton
           onClick={onCancel}
-          style={{
-            background: 'rgba(107, 114, 128, 0.2)',
-            border: '1px solid rgba(107, 114, 128, 0.3)',
-          }}
+          color="pastelBlue"
         >
           Cancel
-        </GlassButton>
-        <GlassButton
+        </BlockButton>
+        <BlockButton
           onClick={handleSave}
           disabled={!name.trim()}
-          style={{
-            background: 'rgba(34, 197, 94, 0.2)',
-            border: '1px solid rgba(34, 197, 94, 0.4)',
-          }}
+          color="pastelMint"
         >
           <Save size={16} style={{ marginRight: '0.5rem' }} />
           Save
-        </GlassButton>
-      </FlexContainer>
+        </BlockButton>
+      </FlexBlock>
     </div>
   );
 };

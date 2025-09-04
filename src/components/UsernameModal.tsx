@@ -5,13 +5,14 @@ import { getDisplayNameInfo } from '../utils/userUtils';
 import { ensCache } from '../utils/ensUtils';
 import { useActiveAccount } from "thirdweb/react";
 import {
-  GlassModal,
-  GlassModalContent,
-  GlassButton,
-  GlassInput,
-  FlexContainer,
-  LoadingSpinner
-} from '../styles/glass';
+  BlockModal,
+  BlockModalContent,
+  BlockButton,
+  BlockInput,
+  blockTheme
+} from '../styles/blocks';
+import { SimpleRetroLoader } from './RetroLoader';
+import { FlexBlock } from '../styles/blocks';
 
 interface UsernameModalProps {
   isOpen: boolean;
@@ -115,37 +116,36 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onClose })
   if (!isOpen) return null;
 
   return (
-    <GlassModal>
-      <GlassModalContent>
-        <FlexContainer justify="space-between" align="center" style={{ marginBottom: '1.5rem' }}>
-          <FlexContainer align="center" gap="0.5rem">
-            <User size={24} style={{ color: 'rgba(139, 92, 246, 0.9)' }} />
+    <BlockModal>
+      <BlockModalContent>
+        <FlexBlock justify="space-between" align="center" style={{ marginBottom: '1.5rem' }}>
+          <FlexBlock align="center" gap="0.5rem">
+            <User size={24} style={{ color: blockTheme.accent }} />
             <h2 style={{ 
               margin: 0, 
               fontSize: '1.5rem', 
-              color: 'rgba(255, 255, 255, 0.9)',
+              color: blockTheme.darkText,
               fontWeight: '600'
             }}>
               {user?.username ? 'Update Username' : 'Set Username'}
             </h2>
-          </FlexContainer>
-          <GlassButton 
+          </FlexBlock>
+          <BlockButton 
             onClick={handleClose}
             disabled={saving}
+            color="pastelCoral"
             style={{ 
               padding: '0.5rem',
-              minWidth: 'auto',
-              background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.3)'
+              minWidth: 'auto'
             }}
           >
             <X size={18} />
-          </GlassButton>
-        </FlexContainer>
+          </BlockButton>
+        </FlexBlock>
 
         <div style={{ marginBottom: '1.5rem' }}>
           <p style={{ 
-            color: 'rgba(255, 255, 255, 0.7)', 
+            color: blockTheme.textMuted, 
             fontSize: '0.9rem', 
             marginBottom: '1rem',
             lineHeight: '1.5'
@@ -158,14 +158,15 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onClose })
           
           {displayInfo && (
             <div style={{ 
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              background: blockTheme.pastelMint,
+              border: `3px solid ${blockTheme.darkText}`,
               borderRadius: '8px',
               padding: '0.75rem',
-              marginBottom: '1rem'
+              marginBottom: '1rem',
+              boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
             }}>
               <p style={{ 
-                color: 'rgba(255, 255, 255, 0.8)', 
+                color: blockTheme.darkText, 
                 fontSize: '0.8rem', 
                 margin: '0 0 0.5rem 0',
                 fontWeight: '600'
@@ -173,7 +174,7 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onClose })
                 Current Display Method:
               </p>
               <p style={{ 
-                color: 'rgba(255, 255, 255, 0.9)', 
+                color: blockTheme.darkText, 
                 fontSize: '0.9rem', 
                 margin: '0',
                 fontFamily: displayInfo.method === 'address' ? 'monospace' : 'inherit'
@@ -186,7 +187,7 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onClose })
               
               {displayInfo.ensName && displayInfo.method !== 'ens' && (
                 <p style={{ 
-                  color: 'rgba(255, 255, 255, 0.6)', 
+                  color: blockTheme.textMuted, 
                   fontSize: '0.75rem', 
                   margin: '0.5rem 0 0 0'
                 }}>
@@ -198,7 +199,7 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onClose })
           
           {user?.wallet_address && (
             <p style={{ 
-              color: 'rgba(255, 255, 255, 0.5)', 
+              color: blockTheme.textMuted, 
               fontSize: '0.8rem', 
               marginBottom: '1rem',
               fontFamily: 'monospace'
@@ -207,7 +208,7 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onClose })
             </p>
           )}
 
-          <GlassInput
+          <BlockInput
             type="text"
             placeholder="Enter username (3-20 characters)"
             value={username}
@@ -222,7 +223,7 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onClose })
 
           {error && (
             <p style={{ 
-              color: 'rgba(239, 68, 68, 0.9)', 
+              color: blockTheme.error, 
               fontSize: '0.8rem', 
               margin: '0.5rem 0 0 0' 
             }}>
@@ -231,66 +232,57 @@ export const UsernameModal: React.FC<UsernameModalProps> = ({ isOpen, onClose })
           )}
         </div>
 
-        <FlexContainer gap="1rem" justify="space-between">
+        <FlexBlock gap="1rem" justify="space-between">
           <div>
             {user?.username && displayInfo?.canRemoveUsername && (
-              <GlassButton 
+              <BlockButton 
                 onClick={handleRemove}
                 disabled={saving}
-                style={{ 
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)'
-                }}
+                color="pastelCoral"
               >
                 {saving ? (
-                  <FlexContainer align="center" gap="0.5rem">
-                    <LoadingSpinner size="1rem" />
+                  <FlexBlock align="center" gap="0.5rem">
+                    <SimpleRetroLoader size="1rem" />
                     Removing...
-                  </FlexContainer>
+                  </FlexBlock>
                 ) : (
-                  <FlexContainer align="center" gap="0.5rem">
+                  <FlexBlock align="center" gap="0.5rem">
                     <Trash2 size={16} />
                     Remove Username
-                  </FlexContainer>
+                  </FlexBlock>
                 )}
-              </GlassButton>
+              </BlockButton>
             )}
           </div>
           
-          <FlexContainer gap="1rem">
-            <GlassButton 
+          <FlexBlock gap="1rem">
+            <BlockButton 
               onClick={handleClose}
               disabled={saving}
-              style={{ 
-                background: 'rgba(107, 114, 128, 0.2)',
-                border: '1px solid rgba(107, 114, 128, 0.3)'
-              }}
+              color="pastelBlue"
             >
               Cancel
-            </GlassButton>
-            <GlassButton 
+            </BlockButton>
+            <BlockButton 
               onClick={handleSave}
               disabled={saving || loading || !username.trim()}
-              style={{ 
-                background: 'rgba(139, 92, 246, 0.2)',
-                border: '1px solid rgba(139, 92, 246, 0.4)'
-              }}
+              color="pastelLavender"
             >
               {saving ? (
-                <FlexContainer align="center" gap="0.5rem">
-                  <LoadingSpinner size="1rem" />
+                <FlexBlock align="center" gap="0.5rem">
+                  <SimpleRetroLoader size="1rem" />
                   Saving...
-                </FlexContainer>
+                </FlexBlock>
               ) : (
-                <FlexContainer align="center" gap="0.5rem">
+                <FlexBlock align="center" gap="0.5rem">
                   <Save size={16} />
                   Save Username
-                </FlexContainer>
+                </FlexBlock>
               )}
-            </GlassButton>
-          </FlexContainer>
-        </FlexContainer>
-      </GlassModalContent>
-    </GlassModal>
+            </BlockButton>
+          </FlexBlock>
+        </FlexBlock>
+      </BlockModalContent>
+    </BlockModal>
   );
 };

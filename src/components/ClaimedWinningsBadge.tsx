@@ -2,21 +2,17 @@ import React from 'react';
 import styled from '@emotion/styled';
 import { keyframes } from '@emotion/react';
 import { CheckCircle, DollarSign, Banknote, Coins } from 'lucide-react';
-import { glassTheme } from '../styles/glass';
+import { blockTheme } from '../styles/blocks';
 
-// Claimed winnings animations
-const successPulse = keyframes`
+// Block-style animations
+const blockPulse = keyframes`
   0%, 100% { 
-    box-shadow: 
-      0 0 15px rgba(34, 197, 94, 0.3),
-      0 0 30px rgba(34, 197, 94, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
+    transform: translateY(0px);
   }
   50% { 
-    box-shadow: 
-      0 0 25px rgba(34, 197, 94, 0.5),
-      0 0 50px rgba(34, 197, 94, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow: 8px 8px 0px ${blockTheme.shadowDark};
+    transform: translateY(-2px);
   }
 `;
 
@@ -33,9 +29,15 @@ const coinFlip = keyframes`
   75% { transform: rotateY(270deg); }
 `;
 
-const fadeInOut = keyframes`
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+const blockBounce = keyframes`
+  0%, 100% { 
+    transform: translateY(0px);
+    box-shadow: 4px 4px 0px ${blockTheme.shadowMedium};
+  }
+  50% { 
+    transform: translateY(-3px);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowMedium};
+  }
 `;
 
 // Styled components
@@ -55,24 +57,18 @@ const ClaimedBadgeContainer = styled.div<{ variant: 'success' | 'money' | 'subtl
   background: ${({ variant }) => {
     switch (variant) {
       case 'success':
-        return 'linear-gradient(135deg, rgba(34, 197, 94, 0.9), rgba(22, 163, 74, 0.9))';
+        return blockTheme.pastelMint;
       case 'money':
-        return 'linear-gradient(135deg, rgba(16, 185, 129, 0.9), rgba(5, 150, 105, 0.9))';
+        return blockTheme.pastelYellow;
       default:
-        return 'linear-gradient(135deg, rgba(156, 163, 175, 0.8), rgba(107, 114, 128, 0.8))';
+        return blockTheme.pastelLavender;
     }
   }};
   
-  border: 1.5px solid ${({ variant }) => {
-    switch (variant) {
-      case 'success': return 'rgba(34, 197, 94, 0.7)';
-      case 'money': return 'rgba(16, 185, 129, 0.7)';
-      default: return 'rgba(156, 163, 175, 0.6)';
-    }
-  }};
+  border: 3px solid ${blockTheme.darkText};
   
-  border-radius: 10px;
-  color: white;
+  border-radius: 12px;
+  color: ${blockTheme.darkText};
   font-size: ${({ size = 'md' }) => {
     switch (size) {
       case 'sm': return '0.7rem';
@@ -80,10 +76,11 @@ const ClaimedBadgeContainer = styled.div<{ variant: 'success' | 'money' | 'subtl
       default: return '0.8rem';
     }
   }};
-  font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  font-weight: 700;
+  text-shadow: none;
+  box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
   
-  animation: ${({ variant }) => variant === 'subtle' ? fadeInOut : successPulse} 4s ease-in-out infinite;
+  animation: ${({ variant }) => variant === 'subtle' ? blockBounce : blockPulse} 3s ease-in-out infinite;
   
   .icon {
     animation: ${({ variant }) => {
@@ -96,8 +93,14 @@ const ClaimedBadgeContainer = styled.div<{ variant: 'success' | 'money' | 'subtl
   }
   
   &:hover {
-    transform: translateY(-1px);
-    transition: transform 0.2s ease;
+    transform: translateY(2px);
+    box-shadow: 4px 4px 0px ${blockTheme.shadowMedium};
+    transition: all 0.2s ease;
+  }
+  
+  &:active {
+    transform: translateY(4px);
+    box-shadow: 2px 2px 0px ${blockTheme.shadowMedium};
   }
 `;
 
@@ -110,7 +113,7 @@ const CrossedOutAmount = styled.div`
   position: relative;
   font-family: monospace;
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: ${blockTheme.textMuted};
   
   &::after {
     content: '';
@@ -119,7 +122,7 @@ const CrossedOutAmount = styled.div`
     left: 0;
     right: 0;
     height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.8), transparent);
+    background: ${blockTheme.error};
     transform: translateY(-50%) rotate(-5deg);
   }
 `;
@@ -128,15 +131,15 @@ const ClaimedOverlay = styled.div`
   position: absolute;
   top: -8px;
   right: -12px;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(22, 163, 74, 0.95));
-  color: white;
-  padding: 0.2rem 0.4rem;
-  border-radius: 6px;
-  font-size: 0.6rem;
+  background: ${blockTheme.pastelMint};
+  color: ${blockTheme.darkText};
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.65rem;
   font-weight: 700;
-  border: 1px solid rgba(34, 197, 94, 0.8);
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
-  animation: ${successPulse} 3s ease-in-out infinite;
+  border: 2px solid ${blockTheme.darkText};
+  box-shadow: 3px 3px 0px ${blockTheme.shadowMedium};
+  animation: ${blockPulse} 3s ease-in-out infinite;
   z-index: 1;
 `;
 

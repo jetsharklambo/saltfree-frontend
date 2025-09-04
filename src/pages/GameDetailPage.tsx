@@ -10,13 +10,18 @@ import { getDisplayNameByAddressSync, preloadDisplayNames, getDisplayNamesByAddr
 import { validation } from '../utils/envUtils';
 import { logger, logGameAction } from '../utils/logger';
 import { 
-  GlassCard, 
-  GlassButton, 
-  FlexContainer, 
-  LoadingSpinner 
-} from '../styles/glass';
+  Block,
+  BlockButton, 
+  FlexBlock,
+  blockTheme,
+  mediumShadow
+} from '../styles/blocks';
+import { SimpleRetroLoader } from '../components/RetroLoader';
 import styled from '@emotion/styled';
 import GameDetailModal from '../components/GameDetailModal';
+import FindGameModal from '../components/FindGameModal';
+import JoinGameModal from '../components/JoinGameModal';
+import PrizeSplitsModal from '../components/PrizeSplitsModal';
 
 interface GameInfo {
   gameCode: string;
@@ -48,29 +53,28 @@ const PageContainer = styled.div`
   }
 `;
 
-const BackButton = styled(GlassButton)`
+const BackButton = styled(BlockButton)`
   margin-bottom: 2rem;
+  background: ${blockTheme.pastelBlue};
   
   &:hover {
-    transform: translateX(-4px);
+    transform: translate(-6px, -2px);
+    box-shadow: 10px 10px 0px ${blockTheme.shadowDark};
   }
 `;
 
-const GameCard = styled(GlassCard)`
+const GameCard = styled(Block)`
   max-width: 800px;
   margin: 0 auto 2rem auto;
   padding: 2rem;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: ${blockTheme.pastelYellow};
+  border: 4px solid ${blockTheme.darkText};
+  border-radius: 20px;
+  box-shadow: 8px 8px 0px ${blockTheme.shadowDark};
   
   @media (max-width: 768px) {
     padding: 1.5rem;
+    margin: 0 auto 1.5rem auto;
   }
 `;
 
@@ -89,9 +93,10 @@ const GameHeader = styled.div`
 const GameTitle = styled.h1`
   font-size: 2.5rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.98);
+  color: ${blockTheme.darkText};
   margin: 0;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  font-family: 'Monaco', 'Menlo', monospace;
+  letter-spacing: 2px;
   
   @media (max-width: 768px) {
     font-size: 2rem;
@@ -105,33 +110,36 @@ const GameStats = styled.div`
   margin-bottom: 2rem;
 `;
 
-const StatCard = styled(GlassCard)`
+const StatCard = styled(Block)`
   padding: 1.5rem;
   text-align: center;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: ${blockTheme.pastelMint};
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 16px;
+  box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
+  transition: all 0.2s ease;
+  
+  &:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 8px 8px 0px ${blockTheme.shadowDark};
+  }
 `;
 
 const StatValue = styled.div`
   font-size: 1.5rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  font-weight: 700;
+  color: ${blockTheme.darkText};
   margin-bottom: 0.5rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  font-family: 'Monaco', 'Menlo', monospace;
 `;
 
 const StatLabel = styled.div`
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  color: ${blockTheme.darkText};
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  font-weight: 600;
+  opacity: 0.8;
 `;
 
 const PlayersSection = styled.div`
@@ -145,26 +153,29 @@ const PlayersList = styled.div`
   margin-top: 1rem;
 `;
 
-const PlayerCard = styled(GlassCard)`
+const PlayerCard = styled(Block)`
   padding: 1rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1.5px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 0 1px rgba(255, 255, 255, 0.04);
+  background: ${blockTheme.pastelPink};
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 12px;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
+  transition: all 0.2s ease;
+  
+  &:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
+  }
 `;
 
 const ErrorMessage = styled.div`
   text-align: center;
   padding: 2rem;
-  color: #ff6b6b;
+  color: ${blockTheme.error};
   font-size: 1.1rem;
+  font-weight: 600;
 `;
 
 const PrizeStructure = styled.div`
@@ -180,50 +191,61 @@ const PrizeStructure = styled.div`
 const PrizeBadge = styled.span<{ color?: string }>`
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.2rem 0.4rem;
-  background: ${props => props.color || 'rgba(255, 255, 255, 0.1)'};
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid ${props => 
-    props.color === 'rgba(255, 215, 0, 0.1)' ? 'rgba(255, 215, 0, 0.3)' :
-    props.color === 'rgba(192, 192, 192, 0.1)' ? 'rgba(192, 192, 192, 0.3)' :
-    props.color === 'rgba(205, 127, 50, 0.1)' ? 'rgba(205, 127, 50, 0.3)' :
-    'rgba(255, 255, 255, 0.2)'};
-  border-radius: 6px;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 8px;
   font-size: 0.7rem;
-  font-weight: 600;
-  color: ${props => 
-    props.color === 'rgba(255, 215, 0, 0.1)' ? '#FFD700' : 
-    props.color === 'rgba(192, 192, 192, 0.1)' ? '#C0C0C0' :
-    props.color === 'rgba(205, 127, 50, 0.1)' ? '#CD7F32' : 'rgba(255, 255, 255, 0.9)'};
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  font-weight: 700;
+  color: ${blockTheme.darkText};
+  transition: all 0.2s ease;
+  ${mediumShadow}
+  
+  background: ${props => {
+    if (props.color === 'rgba(255, 215, 0, 0.1)') return blockTheme.pastelYellow;
+    if (props.color === 'rgba(192, 192, 192, 0.1)') return blockTheme.pastelPink;
+    if (props.color === 'rgba(205, 127, 50, 0.1)') return blockTheme.pastelPeach;
+    return blockTheme.pastelMint;
+  }};
+  
+  &:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0px ${blockTheme.shadowDark};
+  }
 `;
 
 const WinnerTakeAllBadge = styled.span`
-  padding: 0.2rem 0.5rem;
-  background: rgba(255, 215, 0, 0.1);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 215, 0, 0.3);
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  background: ${blockTheme.warning};
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 8px;
   font-size: 0.7rem;
-  font-weight: 600;
-  color: #FFD700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  font-weight: 700;
+  color: ${blockTheme.darkText};
+  transition: all 0.2s ease;
+  ${mediumShadow}
+  
+  &:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0px ${blockTheme.shadowDark};
+  }
 `;
 
-const StatAction = styled(GlassButton)`
+const StatAction = styled(BlockButton)`
   padding: 0.4rem 0.8rem;
   font-size: 0.75rem;
   margin-top: 0.5rem;
   min-height: 32px;
+  background: ${blockTheme.pastelBlue};
   
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    transform: none !important;
+    box-shadow: 2px 2px 0px ${blockTheme.shadowMedium} !important;
   }
 `;
 
@@ -235,19 +257,14 @@ const DecisionBadge = styled.div<{ type: 'players' | 'judges' }>`
   padding: 0.4rem 0.8rem;
   margin-top: 0.5rem;
   min-height: 32px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: ${blockTheme.pastelLavender};
+  border: 3px solid ${blockTheme.darkText};
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   border-radius: 8px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: ${props => 
-    props.type === 'judges' 
-      ? 'rgba(255, 255, 255, 0.95)' 
-      : 'rgba(255, 255, 255, 0.95)'};
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  color: ${blockTheme.darkText};
+  font-weight: 700;
 `;
 
 const JudgeBadge = styled.div`
@@ -255,22 +272,19 @@ const JudgeBadge = styled.div`
   align-items: center;
   gap: 0.3rem;
   padding: 0.4rem 0.8rem;
-  background: rgba(59, 130, 246, 0.3);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(59, 130, 246, 0.6);
+  background: ${blockTheme.info};
+  border: 3px solid ${blockTheme.darkText};
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   border-radius: 8px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+  color: ${blockTheme.darkText};
+  font-weight: 700;
   transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(59, 130, 246, 0.4);
-    border-color: rgba(59, 130, 246, 0.8);
-    transform: translateY(-1px);
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
   }
 `;
 
@@ -285,39 +299,29 @@ const WinnerBadge = styled.div<{ variant: 'gold' | 'silver' | 'bronze' | 'other'
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.3rem 0.6rem;
+  padding: 0.4rem 0.8rem;
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: ${blockTheme.darkText};
+  margin-top: 0.25rem;
+  transition: all 0.2s ease;
+  ${mediumShadow}
+  
   background: ${props => {
     switch (props.variant) {
-      case 'gold': return 'rgba(255, 215, 0, 0.15)';
-      case 'silver': return 'rgba(192, 192, 192, 0.15)';
-      case 'bronze': return 'rgba(205, 127, 50, 0.15)';
-      default: return 'rgba(255, 215, 0, 0.1)';
+      case 'gold': return blockTheme.warning;
+      case 'silver': return blockTheme.pastelBlue;
+      case 'bronze': return blockTheme.pastelPeach;
+      default: return blockTheme.pastelYellow;
     }
   }};
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid ${props => {
-    switch (props.variant) {
-      case 'gold': return 'rgba(255, 215, 0, 0.4)';
-      case 'silver': return 'rgba(192, 192, 192, 0.4)';
-      case 'bronze': return 'rgba(205, 127, 50, 0.4)';
-      default: return 'rgba(255, 215, 0, 0.3)';
-    }
-  }};
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: ${props => {
-    switch (props.variant) {
-      case 'gold': return '#ffd700';
-      case 'silver': return '#c0c0c0';
-      case 'bronze': return '#cd853f';
-      default: return '#ffd700';
-    }
-  }};
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  margin-top: 0.25rem;
+  
+  &:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0px ${blockTheme.shadowDark};
+  }
 `;
 
 const StatCardContainer = styled.div`
@@ -335,6 +339,9 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showFindModal, setShowFindModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(autoJoin);
+  const [showPrizeSplitsModal, setShowPrizeSplitsModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [displayNames, setDisplayNames] = useState<Map<string, string>>(new Map());
   const [isShareCopied, setIsShareCopied] = useState(false);
@@ -671,9 +678,9 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
           console.warn('Failed to log game action:', logError);
         }
 
-        // If autoJoin is true, show the modal
+        // If autoJoin is true, show the join modal with pre-filled code
         if (autoJoin && account?.address) {
-          setShowModal(true);
+          setShowJoinModal(true);
         }
 
       } catch (err) {
@@ -807,8 +814,15 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
         // Remove from winners list
         return prev.filter(addr => addr !== playerAddress);
       } else {
-        // Add to end of winners list (next rank) - limit to 3 winners max
-        if (prev.length >= 3) {
+        // Determine maximum winners based on prize splits
+        const isWinnerTakeAll = !game?.prizeSplits || game.prizeSplits.length === 0 || 
+                                (game.prizeSplits.length === 1 && game.prizeSplits[0] === 1000);
+        const maxWinners = isWinnerTakeAll ? 1 : game?.prizeSplits?.length || 3;
+        
+        // Check if we've reached the maximum number of winners
+        if (prev.length >= maxWinners) {
+          const prizeText = maxWinners === 1 ? 'Winner-take-all game' : `Only ${maxWinners} prize${maxWinners > 1 ? 's' : ''} available`;
+          toast.error(`${prizeText} - maximum ${maxWinners} winner${maxWinners > 1 ? 's' : ''} allowed`);
           return prev;
         }
         return [...prev, playerAddress];
@@ -825,10 +839,20 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
       
       console.log('🏆 Reporting winners in rank order:', selectedWinners, 'for game:', game.gameCode);
       
-      // For winner-take-all games (no prize splits), ensure we only submit one winner
-      let winnersToSubmit = selectedWinners;
+      // Validate winner count matches prize distribution
       const isWinnerTakeAll = !game.prizeSplits || game.prizeSplits.length === 0 || 
                               (game.prizeSplits.length === 1 && game.prizeSplits[0] === 1000);
+      const requiredWinners = isWinnerTakeAll ? 1 : game.prizeSplits?.length || 1;
+      
+      if (selectedWinners.length !== requiredWinners) {
+        const prizeText = isWinnerTakeAll ? 'winner-take-all' : `${requiredWinners} prize${requiredWinners > 1 ? 's' : ''}`;
+        toast.error(`Must select exactly ${requiredWinners} winner${requiredWinners > 1 ? 's' : ''} for this ${prizeText} game. Only winners with available prizes will receive winnings.`);
+        setActionLoading(false);
+        return;
+      }
+      
+      // For winner-take-all games (no prize splits), ensure we only submit one winner
+      let winnersToSubmit = selectedWinners;
                               
       if (isWinnerTakeAll && selectedWinners.length > 0) {
         winnersToSubmit = [selectedWinners[0]]; // Only take the first winner for winner-take-all
@@ -999,9 +1023,9 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
   if (loading) {
     return (
       <PageContainer>
-        <FlexContainer justify="center" align="center" style={{ minHeight: '50vh' }}>
-          <LoadingSpinner size="lg" />
-        </FlexContainer>
+        <FlexBlock justify="center" align="center" style={{ minHeight: '50vh' }}>
+          <SimpleRetroLoader />
+        </FlexBlock>
       </PageContainer>
     );
   }
@@ -1039,34 +1063,37 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
       </Helmet>
       
       <PageContainer>
-        <FlexContainer justify="space-between" align="center" style={{ marginBottom: '2rem' }}>
+        <FlexBlock justify="space-between" align="center" style={{ marginBottom: '2rem' }}>
           <BackButton onClick={() => navigate('/')}>
             <ArrowLeft size={20} />
             Back to Dashboard
           </BackButton>
           
-          <GlassButton onClick={handleShare}>
+          <BlockButton color="pastelPeach" onClick={handleShare}>
             <Share2 size={20} />
             Share Game
-          </GlassButton>
-        </FlexContainer>
+          </BlockButton>
+        </FlexBlock>
 
         <GameCard>
           <GameHeader>
             <div>
               <GameTitle>{gameCode}</GameTitle>
-              <p style={{ color: 'rgba(255, 255, 255, 0.9)', textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)', margin: '0.5rem 0 0 0' }}>
+              <p style={{ color: blockTheme.darkText, margin: '0.5rem 0 0 0', fontWeight: '600', opacity: '0.8' }}>
                 Hosted by {getDisplayNameForAddress(game.host)}
               </p>
             </div>
             
-            <FlexContainer direction="column" align="flex-end" gap="0.5rem">
+            <FlexBlock direction="column" align="flex-end" gap="0.5rem">
               {game.isCompleted && (
                 <div style={{ 
                   padding: '0.5rem 1rem', 
-                  backgroundColor: 'rgba(34, 197, 94, 0.2)', 
-                  borderRadius: '8px',
-                  color: '#22c55e'
+                  backgroundColor: blockTheme.success, 
+                  border: `3px solid ${blockTheme.darkText}`,
+                  borderRadius: '12px',
+                  color: blockTheme.darkText,
+                  fontWeight: '700',
+                  boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
                 }}>
                   COMPLETED
                 </div>
@@ -1077,15 +1104,13 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                     display: 'flex',
                     alignItems: 'center',
                     padding: '0.5rem 1rem', 
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '8px',
-                    color: 'rgba(255, 255, 255, 0.9)',
+                    background: blockTheme.pastelCoral,
+                    border: `3px solid ${blockTheme.darkText}`,
+                    borderRadius: '12px',
+                    color: blockTheme.lightText,
                     fontSize: '0.875rem',
-                    fontWeight: '600',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                    fontWeight: '700',
+                    boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
                   }}>
                     <Lock size={16} style={{ marginRight: '0.5rem' }} />
                     LOCKED
@@ -1095,15 +1120,13 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                     display: 'flex',
                     alignItems: 'center',
                     padding: '0.5rem 1rem', 
-                    background: 'rgba(34, 197, 94, 0.1)',
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
-                    border: '1px solid rgba(34, 197, 94, 0.3)',
-                    borderRadius: '8px',
-                    color: 'rgba(34, 197, 94, 0.9)',
+                    background: blockTheme.success,
+                    border: `3px solid ${blockTheme.darkText}`,
+                    borderRadius: '12px',
+                    color: blockTheme.darkText,
                     fontSize: '0.875rem',
-                    fontWeight: '600',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                    fontWeight: '700',
+                    boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
                   }}>
                     <div style={{
                       width: '16px',
@@ -1128,7 +1151,7 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                   </div>
                 )
               )}
-            </FlexContainer>
+            </FlexBlock>
           </GameHeader>
 
           <GameStats>
@@ -1145,16 +1168,15 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                         alignItems: 'center',
                         padding: '0.25rem 0.5rem',
                         marginTop: '0.5rem',
-                        background: 'rgba(59, 130, 246, 0.1)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                        background: blockTheme.info,
+                        border: `3px solid ${blockTheme.darkText}`,
+                        boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`,
                         borderRadius: '6px',
                         fontSize: '0.75rem',
                         fontWeight: '600',
-                        color: '#60a5fa',
+                        color: blockTheme.darkText,
                         cursor: 'pointer',
-                        textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
+                        fontWeight: '700'
                       }}>
                         Sign in to Join
                       </div>
@@ -1186,7 +1208,7 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                         onClick={handleJoinGame}
                         disabled={actionLoading}
                       >
-                        {actionLoading ? <LoadingSpinner /> : <><Users size={14} />Join</>}
+                        {actionLoading ? <SimpleRetroLoader /> : <><Users size={14} />Join</>}
                       </StatAction>
                     );
                   }
@@ -1221,16 +1243,16 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                     <div style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      padding: '0.25rem 0.5rem',
+                      padding: '0.4rem 0.6rem',
                       marginTop: '0.5rem',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      backdropFilter: 'blur(8px)',
-                      WebkitBackdropFilter: 'blur(8px)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      borderRadius: '6px',
+                      background: blockTheme.pastelCoral,
+                      border: `3px solid ${blockTheme.darkText}`,
+                      borderRadius: '8px',
                       fontSize: '0.75rem',
-                      fontWeight: '500',
-                      color: statusColor
+                      fontWeight: '700',
+                      color: blockTheme.darkText,
+                      boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`,
+                      transition: 'all 0.2s ease'
                     }}>
                       {statusText}
                     </div>
@@ -1259,14 +1281,15 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
             
           </GameStats>
 
-          <FlexContainer justify="center" gap="1rem" style={{ marginBottom: '2rem' }}>
+          <FlexBlock justify="center" gap="1rem" style={{ marginBottom: '2rem' }}>
             {!account?.address ? (
-              <GlassButton 
+              <BlockButton 
+                color="pastelBlue"
                 size="lg"
                 onClick={() => {/* TODO: Implement sign in logic */}}
               >
                 Sign in to Join
-              </GlassButton>
+              </BlockButton>
             ) : (() => {
               const userAddress = account.address.toLowerCase();
               const isHost = game.host.toLowerCase() === userAddress;
@@ -1279,54 +1302,55 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                 <>
                   {/* Join Game Button */}
                   {canJoin && (
-                    <GlassButton 
+                    <BlockButton 
+                      color="pastelPink"
                       size="lg"
                       onClick={handleJoinGame}
                       disabled={actionLoading}
                     >
-                      {actionLoading ? <LoadingSpinner /> : <><Users size={20} />Join Game</>}
-                    </GlassButton>
+                      {actionLoading ? <SimpleRetroLoader /> : <><Users size={20} />Join Game</>}
+                    </BlockButton>
                   )}
                   
                   {/* Claim Winnings Button */}
                   {isWinner && game.isCompleted && (
-                    <GlassButton 
+                    <BlockButton 
+                      color="warning"
                       size="lg"
                       onClick={handleClaimWinnings}
                       disabled={actionLoading}
-                      variant="secondary"
                     >
-                      {actionLoading ? <LoadingSpinner /> : <><Trophy size={20} />Claim Winnings</>}
-                    </GlassButton>
+                      {actionLoading ? <SimpleRetroLoader /> : <><Trophy size={20} />Claim Winnings</>}
+                    </BlockButton>
                   )}
                   
                   {/* Host Actions */}
                   {isHost && !game.isCompleted && (
                     <>
                       {!game.isLocked && (
-                        <GlassButton 
+                        <BlockButton 
+                          color="pastelLavender"
                           size="lg"
                           onClick={handleLockGame}
-                          variant="secondary"
                           disabled={actionLoading}
                         >
-                          {actionLoading ? <LoadingSpinner /> : <><Lock size={20} />Lock Game</>}
-                        </GlassButton>
+                          {actionLoading ? <SimpleRetroLoader /> : <><Lock size={20} />Lock Game</>}
+                        </BlockButton>
                       )}
-                      <GlassButton 
+                      <BlockButton 
+                        color="pastelPeach"
                         size="lg"
-                        onClick={() => setShowModal(true)}
-                        variant="secondary"
+                        onClick={() => setShowPrizeSplitsModal(true)}
                       >
                         <Coins size={20} />
                         Set Prize Splits
-                      </GlassButton>
+                      </BlockButton>
                     </>
                   )}
                 </>
               );
             })()}
-          </FlexContainer>
+          </FlexBlock>
 
           <PlayersSection>
             <h3 style={{ color: 'rgba(255, 255, 255, 0.9)', marginBottom: '1rem' }}>
@@ -1420,24 +1444,24 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                                 justifyContent: 'center',
                                 width: '32px',
                                 height: '32px',
-                                border: '2px solid rgba(239, 68, 68, 0.4)',
-                                borderRadius: '6px',
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                backdropFilter: 'blur(8px)',
-                                WebkitBackdropFilter: 'blur(8px)',
-                                color: '#ef4444',
+                                border: `3px solid ${blockTheme.darkText}`,
+                                borderRadius: '8px',
+                                background: blockTheme.error,
+                                color: blockTheme.darkText,
                                 cursor: 'pointer',
                                 fontSize: '14px',
+                                fontWeight: '700',
+                                boxShadow: `2px 2px 0px ${blockTheme.shadowDark}`,
                                 transition: 'all 0.2s ease'
                               }}
                               title={player.toLowerCase() === userAddress ? "Leave game" : "Remove player"}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+                                e.currentTarget.style.transform = 'translate(-1px, -1px)';
+                                e.currentTarget.style.boxShadow = `3px 3px 0px ${blockTheme.shadowDark}`;
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                                e.currentTarget.style.transform = 'translate(0px, 0px)';
+                                e.currentTarget.style.boxShadow = `2px 2px 0px ${blockTheme.shadowDark}`;
                               }}
                             >
                               <UserMinus size={16} />
@@ -1456,21 +1480,16 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                               justifyContent: 'center',
                               width: '32px',
                               height: '32px',
-                              border: selectedWinners.includes(player) 
-                                ? '2px solid rgba(255, 215, 0, 0.8)' 
-                                : '2px solid rgba(255, 255, 255, 0.3)',
-                              borderRadius: '6px',
+                              border: `3px solid ${blockTheme.darkText}`,
+                              borderRadius: '8px',
                               background: selectedWinners.includes(player)
-                                ? 'rgba(255, 215, 0, 0.2)'
-                                : 'rgba(255, 255, 255, 0.1)',
-                              backdropFilter: 'blur(8px)',
-                              WebkitBackdropFilter: 'blur(8px)',
-                              color: selectedWinners.includes(player) 
-                                ? 'rgba(255, 215, 0, 1)' 
-                                : 'rgba(255, 255, 255, 0.7)',
+                                ? blockTheme.warning
+                                : blockTheme.pastelBlue,
+                              color: blockTheme.darkText,
                               cursor: 'pointer',
                               fontSize: '12px',
-                              fontWeight: 'bold',
+                              fontWeight: '700',
+                              boxShadow: `2px 2px 0px ${blockTheme.shadowDark}`,
                               transition: 'all 0.2s ease'
                             }}
                             title={selectedWinners.includes(player) 
@@ -1510,21 +1529,26 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
                 hasJudges ? isJudge : hasJoined // Judge-decided: only judges can vote, Player-decided: players can vote
               );
               
+              const isWinnerTakeAll = !game.prizeSplits || game.prizeSplits.length === 0 || 
+                                      (game.prizeSplits.length === 1 && game.prizeSplits[0] === 1000);
+              const requiredWinners = isWinnerTakeAll ? 1 : game.prizeSplits?.length || 1;
+              const hasCorrectWinnerCount = selectedWinners.length === requiredWinners;
+
               return canVote && selectedWinners.length > 0 && (
                 <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-                  <GlassButton
+                  <BlockButton
+                    color="warning"
                     size="lg"
                     onClick={handleReportWinners}
-                    disabled={actionLoading}
-                    variant="primary"
+                    disabled={actionLoading || !hasCorrectWinnerCount}
                   >
-                    {actionLoading ? <LoadingSpinner /> : (
+                    {actionLoading ? <SimpleRetroLoader /> : (
                       <>
                         <Trophy size={20} />
-                        Report Winners ({selectedWinners.length})
+                        Report Winners ({selectedWinners.length}/{requiredWinners})
                       </>
                     )}
-                  </GlassButton>
+                  </BlockButton>
                 </div>
               );
             })()}
@@ -1543,6 +1567,43 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
             }}
             onClose={() => setShowModal(false)}
             onRefresh={() => window.location.reload()}
+          />
+        )}
+        
+        {showFindModal && (
+          <FindGameModal
+            onClose={() => setShowFindModal(false)}
+            onSuccess={() => {
+              setShowFindModal(false);
+              // Refresh the page to show the updated game state
+              window.location.reload();
+            }}
+            initialCode={gameCode}
+            autoSearch={autoJoin}
+          />
+        )}
+        
+        {showJoinModal && (
+          <JoinGameModal
+            onClose={() => setShowJoinModal(false)}
+            onSuccess={() => {
+              setShowJoinModal(false);
+              // Refresh the page to show the updated game state
+              window.location.reload();
+            }}
+            initialGameCode={gameCode}
+          />
+        )}
+
+        {showPrizeSplitsModal && game && (
+          <PrizeSplitsModal
+            gameCode={game.gameCode}
+            currentSplits={game.prizeSplits || []}
+            onClose={() => setShowPrizeSplitsModal(false)}
+            onSuccess={(newSplits) => {
+              setGame(prev => prev ? { ...prev, prizeSplits: newSplits } : null);
+              setShowPrizeSplitsModal(false);
+            }}
           />
         )}
       </PageContainer>

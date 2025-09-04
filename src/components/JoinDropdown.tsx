@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Users, Shield, ChevronDown } from 'lucide-react';
 import { GlassButton } from '../styles/glass';
+import { blockTheme, mediumShadow } from '../styles/blocks';
 import styled from '@emotion/styled';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatEth } from '../thirdweb';
@@ -111,13 +112,20 @@ const ItemSubtitle = styled.div`
 `;
 
 const JudgeTag = styled.div`
-  background: rgba(34, 197, 94, 0.2);
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  border-radius: 6px;
-  padding: 0.25rem 0.5rem;
+  background: ${blockTheme.success};
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
   font-size: 0.7rem;
-  font-weight: 600;
-  color: #4ade80;
+  font-weight: 700;
+  color: ${blockTheme.darkText};
+  transition: all 0.2s ease;
+  ${mediumShadow}
+  
+  &:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0px ${blockTheme.shadowDark};
+  }
 `;
 
 const JoinDropdown: React.FC<JoinDropdownProps> = ({

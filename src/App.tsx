@@ -15,6 +15,7 @@ import { UserProvider } from './contexts/UserContext';
 import { validateEnvironment } from './utils/envUtils';
 import styled from '@emotion/styled';
 import { Global, css } from '@emotion/react';
+import { blockTheme, blockMedia } from './styles/blocks';
 
 import { GracefulErrorBoundary } from './components/GracefulErrorBoundary';
 
@@ -33,14 +34,27 @@ const globalStyles = css`
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 
                  'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-    background: linear-gradient(135deg, 
-      #0f172a 0%, 
-      #1e293b 30%,
-      #0f172a 60%,
-      #020617 100%);
-    color: rgba(255, 255, 255, 0.95);
+    /* 90s pastel gradient background */
+    background: linear-gradient(45deg, 
+      ${blockTheme.pastelPink} 0%,
+      ${blockTheme.pastelPeach} 25%,
+      ${blockTheme.pastelYellow} 50%,
+      ${blockTheme.pastelMint} 75%,
+      ${blockTheme.pastelBlue} 100%
+    );
+    background-size: 400% 400%;
+    animation: gradientShift 10s ease infinite;
+    color: ${blockTheme.darkText};
     min-height: 100vh;
     position: relative;
+    /* Prevent iOS bounce effect */
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
   }
 
   #root {
@@ -49,23 +63,30 @@ const globalStyles = css`
     z-index: 1;
   }
 
-  /* Scrollbar styling */
+  /* 90s-style chunky scrollbar */
   ::-webkit-scrollbar {
-    width: 8px;
+    width: 16px;
   }
 
   ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+    background: ${blockTheme.pastelBlue};
+    border: 2px solid ${blockTheme.darkText};
+    border-radius: 8px;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
+    background: ${blockTheme.pastelPink};
+    border: 2px solid ${blockTheme.darkText};
+    border-radius: 8px;
+    
+    &:hover {
+      background: ${blockTheme.pastelCoral};
+    }
   }
 
-  ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.4);
+  ::-webkit-scrollbar-corner {
+    background: ${blockTheme.pastelYellow};
+    border: 2px solid ${blockTheme.darkText};
   }
 `;
 
@@ -82,12 +103,28 @@ const BackgroundOverlay = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
+  /* 90s geometric patterns overlay */
   background: 
-    radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.06) 0%, transparent 70%),
-    radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.03) 0%, transparent 70%),
-    radial-gradient(circle at 40% 40%, rgba(120, 219, 226, 0.02) 0%, transparent 70%);
+    repeating-linear-gradient(
+      45deg,
+      transparent 0px,
+      transparent 20px,
+      rgba(0, 0, 0, 0.02) 20px,
+      rgba(0, 0, 0, 0.02) 40px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0px,
+      transparent 30px,
+      rgba(255, 255, 255, 0.03) 30px,
+      rgba(255, 255, 255, 0.03) 60px
+    );
   z-index: 0;
   pointer-events: none;
+  
+  ${blockMedia.mobile} {
+    opacity: 0.7;
+  }
 `;
 
 const WalletBar = styled.div`
@@ -96,7 +133,7 @@ const WalletBar = styled.div`
   right: 2rem;
   z-index: 1000;
   
-  @media (max-width: 768px) {
+  ${blockMedia.tablet} {
     top: 1rem;
     right: 1rem;
     left: 1rem;
@@ -107,24 +144,29 @@ const WalletBar = styled.div`
 
 const StyledConnectButton = styled.div`
   button {
-    background: rgba(255, 255, 255, 0.1) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: ${blockTheme.pastelLavender} !important;
+    border: 3px solid ${blockTheme.darkText} !important;
     border-radius: 12px !important;
-    color: rgba(255, 255, 255, 0.9) !important;
-    font-weight: 500 !important;
+    color: ${blockTheme.darkText} !important;
+    font-weight: 700 !important;
     padding: 0.75rem 1.5rem !important;
-    transition: all 0.2s ease !important;
+    transition: all 0.15s ease !important;
+    box-shadow: 6px 6px 0px ${blockTheme.shadowDark} !important;
+    font-family: inherit !important;
     
     &:hover {
-      background: rgba(255, 255, 255, 0.15) !important;
-      transform: translateY(-2px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+      background: ${blockTheme.pastelCoral} !important;
+      transform: translate(-2px, -2px) !important;
+      box-shadow: 8px 8px 0px ${blockTheme.shadowDark} !important;
+    }
+    
+    &:active {
+      transform: translate(2px, 2px) !important;
+      box-shadow: 2px 2px 0px ${blockTheme.shadowDark} !important;
     }
   }
   
-  @media (max-width: 768px) {
+  ${blockMedia.tablet} {
     button {
       padding: 1rem 1.5rem !important;
       font-size: 16px !important; /* Prevent zoom on iOS */
@@ -194,7 +236,7 @@ function App() {
                 
                 <Footer />
                 
-                {/* Toast notifications */}
+                {/* 90s-style Toast notifications */}
                 <Toaster
                   position="bottom-right"
                   reverseOrder={false}
@@ -202,27 +244,32 @@ function App() {
                   toastOptions={{
                     duration: 4000,
                     style: {
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      backdropFilter: 'blur(16px)',
-                      WebkitBackdropFilter: 'blur(16px)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      background: blockTheme.pastelYellow,
+                      border: `3px solid ${blockTheme.darkText}`,
                       borderRadius: '12px',
-                      color: 'rgba(255, 255, 255, 0.9)',
-                      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                      color: blockTheme.darkText,
+                      boxShadow: `6px 6px 0px ${blockTheme.shadowDark}`,
                       fontSize: '0.9rem',
+                      fontWeight: '600',
                       maxWidth: '400px',
                       padding: '16px',
                     },
                     success: {
+                      style: {
+                        background: blockTheme.pastelMint,
+                      },
                       iconTheme: {
-                        primary: '#22c55e',
-                        secondary: 'rgba(255, 255, 255, 0.9)',
+                        primary: blockTheme.success,
+                        secondary: blockTheme.darkText,
                       },
                     },
                     error: {
+                      style: {
+                        background: blockTheme.pastelCoral,
+                      },
                       iconTheme: {
-                        primary: '#ef4444',
-                        secondary: 'rgba(255, 255, 255, 0.9)',
+                        primary: blockTheme.error,
+                        secondary: blockTheme.darkText,
                       },
                     },
                   }}

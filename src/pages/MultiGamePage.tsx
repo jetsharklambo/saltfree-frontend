@@ -9,11 +9,12 @@ import { getGameContract, formatEth } from '../thirdweb';
 import { getDisplayNameByAddressSync } from '../utils/userUtils';
 import { logger, logGameAction } from '../utils/logger';
 import { 
-  GlassCard, 
-  GlassButton, 
-  FlexContainer, 
-  LoadingSpinner 
-} from '../styles/glass';
+  Block,
+  BlockButton, 
+  FlexBlock,
+  blockTheme
+} from '../styles/blocks';
+import { SimpleRetroLoader } from '../components/RetroLoader';
 import styled from '@emotion/styled';
 import GameDetailModal from '../components/GameDetailModal';
 
@@ -42,11 +43,13 @@ const PageContainer = styled.div`
   }
 `;
 
-const BackButton = styled(GlassButton)`
+const BackButton = styled(BlockButton)`
   margin-bottom: 2rem;
+  background: ${blockTheme.pastelBlue};
   
   &:hover {
-    transform: translateX(-4px);
+    transform: translate(-6px, -2px);
+    box-shadow: 10px 10px 0px ${blockTheme.shadowDark};
   }
 `;
 
@@ -62,13 +65,18 @@ const GamesGrid = styled.div`
   }
 `;
 
-const GameCard = styled(GlassCard)`
+const GameCard = styled(Block)`
   padding: 1.5rem;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition: all 0.2s ease;
+  background: ${blockTheme.pastelYellow};
+  border: 4px solid ${blockTheme.darkText};
+  border-radius: 20px;
+  box-shadow: 8px 8px 0px ${blockTheme.shadowDark};
   
   &:hover {
-    transform: translateY(-4px);
+    transform: translate(-4px, -4px);
+    box-shadow: 12px 12px 0px ${blockTheme.shadowDark};
   }
 `;
 
@@ -82,8 +90,10 @@ const GameHeader = styled.div`
 const GameTitle = styled.h2`
   font-size: 1.5rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
+  color: ${blockTheme.darkText};
   margin: 0;
+  font-family: 'Monaco', 'Menlo', monospace;
+  letter-spacing: 1px;
 `;
 
 const GameStats = styled.div`
@@ -100,21 +110,27 @@ const StatItem = styled.div`
 const StatValue = styled.div`
   font-size: 1.1rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: ${blockTheme.darkText};
+  font-family: 'Monaco', 'Menlo', monospace;
 `;
 
 const StatLabel = styled.div`
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: ${blockTheme.lightText};
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  font-weight: 600;
 `;
 
-const LoadingCard = styled(GlassCard)`
+const LoadingCard = styled(Block)`
   padding: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: ${blockTheme.pastelMint};
+  border: 4px solid ${blockTheme.darkText};
+  border-radius: 20px;
+  box-shadow: 8px 8px 0px ${blockTheme.shadowDark};
 `;
 
 export default function MultiGamePage() {
@@ -363,9 +379,9 @@ export default function MultiGamePage() {
   if (loading) {
     return (
       <PageContainer>
-        <FlexContainer justify="center" align="center" style={{ minHeight: '50vh' }}>
-          <LoadingSpinner size="lg" />
-        </FlexContainer>
+        <LoadingCard>
+          <SimpleRetroLoader />
+        </LoadingCard>
       </PageContainer>
     );
   }
@@ -390,24 +406,35 @@ export default function MultiGamePage() {
       </Helmet>
       
       <PageContainer>
-        <FlexContainer justify="space-between" align="center" style={{ marginBottom: '2rem' }}>
+        <FlexBlock justify="space-between" align="center" style={{ marginBottom: '2rem' }}>
           <BackButton onClick={() => navigate('/')}>
             <ArrowLeft size={20} />
             Back to Dashboard
           </BackButton>
           
-          <GlassButton onClick={handleShare}>
+          <BlockButton onClick={handleShare} color="pastelPeach">
             <Share2 size={20} />
             Share Games
-          </GlassButton>
-        </FlexContainer>
+          </BlockButton>
+        </FlexBlock>
 
         <div style={{ marginBottom: '2rem' }}>
-          <h1 style={{ color: 'rgba(255, 255, 255, 0.95)', margin: '0 0 0.5rem 0', fontSize: '2rem' }}>
+          <h1 style={{ 
+            color: blockTheme.darkText, 
+            margin: '0 0 0.5rem 0', 
+            fontSize: '2rem',
+            fontFamily: "'Monaco', 'Menlo', monospace",
+            fontWeight: 700,
+            letterSpacing: '2px'
+          }}>
             {validGames.length} Games
           </h1>
           {errorGames.length > 0 && (
-            <p style={{ color: 'rgba(255, 255, 255, 0.7)', margin: 0 }}>
+            <p style={{ 
+              color: blockTheme.lightText, 
+              margin: 0,
+              fontWeight: 600
+            }}>
               {validGames.length} found, {errorGames.length} not found
             </p>
           )}
@@ -419,44 +446,50 @@ export default function MultiGamePage() {
               <GameHeader>
                 <div>
                   <GameTitle>{game.gameCode}</GameTitle>
-                  <p style={{ color: 'rgba(255, 255, 255, 0.6)', margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>
+                  <p style={{ 
+                    color: blockTheme.lightText, 
+                    margin: '0.25rem 0 0 0', 
+                    fontSize: '0.9rem',
+                    fontWeight: 600
+                  }}>
                     Host: {getDisplayNameByAddressSync(game.host)}
                   </p>
                 </div>
                 
-                <FlexContainer direction="column" align="flex-end" gap="0.5rem">
+                <FlexBlock direction="column" align="flex-end" gap="0.5rem">
                   {game.isCompleted && (
                     <div style={{ 
-                      padding: '0.25rem 0.75rem', 
-                      backgroundColor: 'rgba(34, 197, 94, 0.2)', 
-                      borderRadius: '6px',
+                      padding: '0.4rem 0.8rem', 
+                      background: blockTheme.success,
+                      border: `3px solid ${blockTheme.darkText}`,
+                      borderRadius: '8px',
                       fontSize: '0.8rem',
-                      color: '#22c55e'
+                      fontWeight: '700',
+                      color: blockTheme.darkText,
+                      boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
                     }}>
                       COMPLETE
                     </div>
                   )}
                   {game.isLocked && !game.isCompleted && (
                     <div style={{ 
-                      padding: '0.3rem 0.8rem', 
-                      background: 'rgba(251, 191, 36, 0.15)',
-                      backdropFilter: 'blur(8px)',
-                      WebkitBackdropFilter: 'blur(8px)',
-                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      padding: '0.4rem 0.8rem', 
+                      background: blockTheme.warning,
+                      border: `3px solid ${blockTheme.darkText}`,
                       borderRadius: '8px',
                       fontSize: '0.75rem',
-                      fontWeight: '500',
-                      color: 'rgba(245, 158, 11, 0.9)',
+                      fontWeight: '700',
+                      color: blockTheme.darkText,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.3rem',
-                      textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)'
+                      boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
                     }}>
                       <Lock size={11} />
                       Locked
                     </div>
                   )}
-                </FlexContainer>
+                </FlexBlock>
               </GameHeader>
 
               <GameStats>
@@ -480,16 +513,19 @@ export default function MultiGamePage() {
                 <div style={{ 
                   marginTop: '1rem', 
                   padding: '0.75rem', 
-                  backgroundColor: 'rgba(255, 215, 0, 0.1)', 
-                  borderRadius: '8px',
-                  borderLeft: '3px solid #ffd700'
+                  backgroundColor: blockTheme.success,
+                  border: `3px solid ${blockTheme.darkText}`,
+                  borderRadius: '12px',
+                  boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`
                 }}>
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
                     gap: '0.5rem', 
                     fontSize: '0.9rem',
-                    color: '#ffd700'
+                    color: blockTheme.darkText,
+                    fontWeight: 700,
+                    fontFamily: "'Monaco', 'Menlo', monospace"
                   }}>
                     <Trophy size={16} />
                     Winners: {game.winners.length}

@@ -8,14 +8,14 @@ import { logBuyInInfo, formatBuyInForDisplay } from '../utils/buyInUtils';
 import { getDisplayNameByAddressSync, preloadUsernames, preloadDisplayNames, getDisplayNamesByAddresses, getDisplayNameInfo } from '../utils/userUtils';
 import { useUser } from '../contexts/UserContext';
 import { 
-  GlassModal, 
-  GlassModalContent, 
-  GlassButton, 
-  
-  FlexContainer, 
-  LoadingSpinner,
-  glassTheme 
-} from '../styles/glass';
+  BlockModal, 
+  BlockModalContent, 
+  BlockButton, 
+  FlexBlock,
+  blockTheme,
+  PixelText
+} from '../styles/blocks';
+import { SimpleRetroLoader } from './RetroLoader';
 import styled from '@emotion/styled';
 import { GameData } from '../contexts/GameDataContext';
 import PrizeSplitsModal from './PrizeSplitsModal';
@@ -48,7 +48,7 @@ const ModalHeader = styled.div`
 const ModalTitle = styled.h2`
   font-size: 1.75rem;
   font-weight: 700;
-  color: ${glassTheme.text};
+  color: ${blockTheme.text};
   margin: 0;
   font-family: 'Monaco', 'Menlo', monospace;
   letter-spacing: 1px;
@@ -57,7 +57,7 @@ const ModalTitle = styled.h2`
   user-select: none;
   
   &:hover {
-    color: ${glassTheme.accent};
+    color: ${blockTheme.accent};
     transform: scale(1.02);
   }
   
@@ -67,22 +67,29 @@ const ModalTitle = styled.h2`
 `;
 
 const CloseButton = styled.button`
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: ${blockTheme.pastelCoral};
+  border: 3px solid ${blockTheme.darkText};
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.7);
+  color: ${blockTheme.darkText};
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
+  font-weight: bold;
   
   &:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.9);
-    transform: scale(1.05);
+    background: ${blockTheme.error};
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
+  }
+  
+  &:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
   }
 `;
 
@@ -90,32 +97,33 @@ const GameStats = styled.div`
   text-align: center;
   margin-bottom: 2rem;
   padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: ${blockTheme.pastelBlue};
+  border: 3px solid ${blockTheme.darkText};
   border-radius: 16px;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
 `;
 
 const PotSize = styled.div`
   font-size: 2.5rem;
   font-weight: 700;
-  color: ${glassTheme.accent};
+  color: ${blockTheme.accent};
   margin-bottom: 0.5rem;
   text-shadow: 0 0 20px rgba(120, 119, 198, 0.5);
   
   .currency {
     font-size: 1.5rem;
-    color: ${glassTheme.text};
+    color: ${blockTheme.text};
     opacity: 0.8;
   }
 `;
 
 const PlayerStats = styled.div`
   font-size: 1.25rem;
-  color: ${glassTheme.text};
+  color: ${blockTheme.text};
   margin-bottom: 1rem;
   
   .current {
-    color: ${glassTheme.accent};
+    color: ${blockTheme.accent};
     font-weight: 600;
   }
   
@@ -129,41 +137,35 @@ const RoleDisplay = styled.div<{ role: 'host' | 'player' | 'unknown' }>`
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  border-radius: 25px;
+  border-radius: 12px;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  border: 3px solid ${blockTheme.darkText};
+  color: ${blockTheme.darkText};
+  transition: all 0.2s ease;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   
-  ${({ role }) => {
-    if (role === 'host') {
-      return `
-        background: rgba(255, 193, 7, 0.2);
-        color: rgba(255, 193, 7, 1);
-        border: 1px solid rgba(255, 193, 7, 0.4);
-      `;
-    } else if (role === 'player') {
-      return `
-        background: rgba(34, 197, 94, 0.2);
-        color: rgba(34, 197, 94, 1);
-        border: 1px solid rgba(34, 197, 94, 0.4);
-      `;
-    } else {
-      return `
-        background: rgba(156, 163, 175, 0.2);
-        color: rgba(156, 163, 175, 1);
-        border: 1px solid rgba(156, 163, 175, 0.4);
-      `;
-    }
-  }}
+  background: ${({ role }) => {
+    if (role === 'host') return blockTheme.warning;
+    if (role === 'player') return blockTheme.success;
+    return blockTheme.pastelPink;
+  }};
+  
+  &:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0px ${blockTheme.shadowDark};
+  }
 `;
 
 const InfoSection = styled.div`
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: ${blockTheme.pastelMint};
+  border: 3px solid ${blockTheme.darkText};
   border-radius: 12px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
 `;
 
 const InfoGrid = styled.div`
@@ -183,17 +185,17 @@ const InfoItem = styled.div`
   font-size: 0.9rem;
   
   .icon {
-    color: ${glassTheme.accent};
+    color: ${blockTheme.accent};
     opacity: 0.8;
   }
   
   .label {
-    color: ${glassTheme.textMuted};
+    color: ${blockTheme.textMuted};
     min-width: 80px;
   }
   
   .value {
-    color: ${glassTheme.text};
+    color: ${blockTheme.text};
     font-weight: 500;
   }
 `;
@@ -203,7 +205,7 @@ const ActionSection = styled.div`
   
   h3 {
     font-size: 1.25rem;
-    color: ${glassTheme.text};
+    color: ${blockTheme.text};
     margin: 0 0 1rem 0;
     display: flex;
     align-items: center;
@@ -215,8 +217,12 @@ const PlayersList = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  max-height: 200px;
+  max-height: 400px;
   overflow-y: auto;
+  
+  @media (max-width: 768px) {
+    max-height: 300px;
+  }
 `;
 
 const PlayerCard = styled.div<{ isSelected?: boolean; isWinner?: boolean; hasClaimed?: boolean }>`
@@ -225,28 +231,32 @@ const PlayerCard = styled.div<{ isSelected?: boolean; isWinner?: boolean; hasCla
   justify-content: space-between;
   padding: 1rem;
   background: ${({ isSelected, isWinner, hasClaimed }) => {
-    if (isSelected) return 'rgba(120, 119, 198, 0.2)';
-    if (isWinner && hasClaimed) return 'rgba(34, 197, 94, 0.15)'; // Green for claimed
-    if (isWinner) return 'rgba(255, 193, 7, 0.15)'; // Gold for winner
-    return 'rgba(255, 255, 255, 0.05)'; // Default
+    if (isSelected) return blockTheme.pastelLavender;
+    if (isWinner && hasClaimed) return blockTheme.success; // Green for claimed
+    if (isWinner) return blockTheme.warning; // Gold for winner
+    return blockTheme.lightText; // Default
   }};
-  border: 1px solid ${({ isSelected, isWinner, hasClaimed }) => {
-    if (isSelected) return 'rgba(120, 119, 198, 0.4)';
-    if (isWinner && hasClaimed) return 'rgba(34, 197, 94, 0.4)';
-    if (isWinner) return 'rgba(255, 193, 7, 0.4)';
-    return 'rgba(255, 255, 255, 0.1)';
+  border: 3px solid ${({ isSelected, isWinner, hasClaimed }) => {
+    if (isSelected) return blockTheme.accent;
+    if (isWinner && hasClaimed) return blockTheme.success;
+    if (isWinner) return blockTheme.warning;
+    return blockTheme.darkText;
   }};
   border-radius: 12px;
   font-size: 0.875rem;
   transition: all 0.2s ease;
+  box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
   
   &:hover {
-    background: ${({ isWinner, hasClaimed }) => {
-      if (isWinner && hasClaimed) return 'rgba(34, 197, 94, 0.2)';
-      if (isWinner) return 'rgba(255, 193, 7, 0.2)';
-      return 'rgba(255, 255, 255, 0.1)';
-    }};
-    transform: translateY(-1px);
+    transform: translate(-2px, -2px);
+    box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
+  }
+  
+  @media (max-width: 768px) {
+    padding: 0.75rem;
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 `;
 
@@ -255,6 +265,7 @@ const PlayerInfo = styled.div`
   align-items: center;
   gap: 0.75rem;
   flex: 1;
+  min-width: 0; /* Allow text to truncate on mobile */
   
   .position {
     display: flex;
@@ -266,21 +277,46 @@ const PlayerInfo = styled.div`
     background: rgba(255, 255, 255, 0.1);
     font-size: 0.75rem;
     font-weight: 500;
+    flex-shrink: 0;
   }
   
   .address {
     font-family: 'Monaco', 'Menlo', monospace;
-    color: ${glassTheme.text};
+    color: ${blockTheme.text};
     font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
+    
+    @media (max-width: 768px) {
+      font-size: 0.8rem;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.25rem;
+    }
   }
   
   .you {
-    color: ${glassTheme.accent};
-    font-weight: 500;
+    color: ${blockTheme.darkText};
+    font-weight: 700;
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
-    background: rgba(120, 119, 198, 0.2);
-    border-radius: 12px;
+    background: ${blockTheme.accent};
+    border: 2px solid ${blockTheme.darkText};
+    border-radius: 8px;
+    box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
+    white-space: nowrap;
+    
+    @media (max-width: 768px) {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.4rem;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    gap: 0.5rem;
   }
 `;
 
@@ -294,53 +330,51 @@ const ActionIcon = styled.button<{ active?: boolean; variant?: 'winner' | 'judge
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  border: 1px solid;
+  border: 3px solid;
   background: ${({ active, variant }) => {
     if (active) {
       return variant === 'winner' 
-        ? 'rgba(255, 193, 7, 0.3)' 
-        : 'rgba(120, 119, 198, 0.3)';
+        ? blockTheme.warning 
+        : blockTheme.accent;
     }
-    return 'rgba(255, 255, 255, 0.1)';
+    return blockTheme.pastelPink;
   }};
-  border-color: ${({ active, variant }) => {
-    if (active) {
-      return variant === 'winner' 
-        ? 'rgba(255, 193, 7, 0.6)' 
-        : 'rgba(120, 119, 198, 0.6)';
-    }
-    return 'rgba(255, 255, 255, 0.2)';
-  }};
+  border-color: ${blockTheme.darkText};
   color: ${({ active, variant }) => {
     if (active) {
-      return variant === 'winner' 
-        ? 'rgba(255, 193, 7, 1)' 
-        : 'rgba(120, 119, 198, 1)';
+      return blockTheme.darkText;
     }
-    return glassTheme.textSecondary;
+    return blockTheme.textSecondary;
   }};
   cursor: pointer;
   transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
+  
+  &:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px ${blockTheme.shadowDark};
+  }
   
   &:hover {
     background: ${({ variant }) => 
       variant === 'winner' 
-        ? 'rgba(255, 193, 7, 0.2)' 
-        : 'rgba(120, 119, 198, 0.2)'};
-    border-color: ${({ variant }) => 
-      variant === 'winner' 
-        ? 'rgba(255, 193, 7, 0.5)' 
-        : 'rgba(120, 119, 198, 0.5)'};
-    transform: scale(1.1);
+        ? blockTheme.warning 
+        : blockTheme.pastelPeach};
+    transform: translate(-2px, -2px);
+    box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   }
   
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+    box-shadow: 2px 2px 0px ${blockTheme.shadowMedium};
   }
 `;
 
@@ -348,32 +382,30 @@ const ActionIcon = styled.button<{ active?: boolean; variant?: 'winner' | 'judge
 
 const StatusMessage = styled.div<{ variant: 'info' | 'success' | 'warning' | 'error' }>`
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 0.875rem;
   margin-bottom: 1rem;
-  border: 1px solid;
+  border: 3px solid ${blockTheme.darkText};
+  font-weight: 600;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   
   ${({ variant }) => {
     const styles = {
       info: `
-        background: rgba(59, 130, 246, 0.1);
-        color: rgba(147, 197, 253, 1);
-        border-color: rgba(59, 130, 246, 0.3);
+        background: ${blockTheme.info};
+        color: ${blockTheme.darkText};
       `,
       success: `
-        background: rgba(34, 197, 94, 0.1);
-        color: rgba(134, 239, 172, 1);
-        border-color: rgba(34, 197, 94, 0.3);
+        background: ${blockTheme.success};
+        color: ${blockTheme.darkText};
       `,
       warning: `
-        background: rgba(245, 158, 11, 0.1);
-        color: rgba(251, 191, 36, 1);
-        border-color: rgba(245, 158, 11, 0.3);
+        background: ${blockTheme.warning};
+        color: ${blockTheme.darkText};
       `,
       error: `
-        background: rgba(239, 68, 68, 0.1);
-        color: rgba(248, 113, 113, 1);
-        border-color: rgba(239, 68, 68, 0.3);
+        background: ${blockTheme.error};
+        color: ${blockTheme.lightText};
       `
     };
     return styles[variant];
@@ -381,24 +413,23 @@ const StatusMessage = styled.div<{ variant: 'info' | 'success' | 'warning' | 'er
 `;
 
 
-// Winner badge component with glass styling
+// Winner badge component with block styling
 const WinnerBadge = () => (
   <span style={{
-    background: 'rgba(255, 215, 0, 0.15)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    border: '1px solid rgba(255, 215, 0, 0.3)',
-    color: '#ffd700',
-    padding: '4px 8px',
-    borderRadius: '8px',
+    background: blockTheme.warning,
+    border: `2px solid ${blockTheme.darkText}`,
+    color: blockTheme.darkText,
+    padding: '0.2rem 0.4rem',
+    borderRadius: '6px',
     fontSize: '0.8rem',
-    marginLeft: '8px',
+    marginLeft: '4px',
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    fontWeight: 600,
-    textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-    boxShadow: '0 2px 8px rgba(255, 215, 0, 0.1)'
+    fontWeight: '700',
+    boxShadow: `2px 2px 0px ${blockTheme.shadowDark}`,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px'
   }}>
     🏆 Winner
   </span>
@@ -407,12 +438,15 @@ const WinnerBadge = () => (
 // Claimed badge component  
 const ClaimedBadge = () => (
   <span style={{
-    background: 'rgba(34, 197, 94, 0.2)',
-    color: '#22c55e',
-    padding: '2px 4px',
-    borderRadius: '4px',
+    background: blockTheme.success,
+    color: blockTheme.darkText,
+    padding: '0.2rem 0.4rem',
+    border: `2px solid ${blockTheme.darkText}`,
+    borderRadius: '6px',
     fontSize: '0.8rem',
+    fontWeight: '700',
     marginLeft: '4px',
+    boxShadow: `2px 2px 0px ${blockTheme.shadowDark}`,
     display: 'inline-flex',
     alignItems: 'center',
     fontWeight: 500
@@ -430,36 +464,29 @@ const GameStatusIndicator = styled.div<{ $hasWinners: boolean }>`
   padding: 0.75rem 1rem;
   margin: 0.5rem 0 1rem 0;
   border-radius: 12px;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.9rem;
   background: ${({ $hasWinners }) => 
     $hasWinners 
-      ? 'rgba(255, 193, 7, 0.15)' 
-      : 'rgba(34, 197, 94, 0.15)'
+      ? blockTheme.warning 
+      : blockTheme.success
   };
-  border: 1px solid ${({ $hasWinners }) => 
-    $hasWinners 
-      ? 'rgba(255, 193, 7, 0.3)' 
-      : 'rgba(34, 197, 94, 0.3)'
-  };
-  color: ${({ $hasWinners }) => 
-    $hasWinners 
-      ? '#ffc107' 
-      : '#22c55e'
-  };
+  border: 3px solid ${blockTheme.darkText};
+  color: ${blockTheme.darkText};
   transition: all 0.3s ease;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
   
   ${({ $hasWinners }) => $hasWinners && `
     animation: subtle-pulse 2s ease-in-out infinite;
     
     @keyframes subtle-pulse {
       0%, 100% { 
-        opacity: 1; 
         transform: scale(1); 
+        box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
       }
       50% { 
-        opacity: 0.9; 
-        transform: scale(1.01); 
+        transform: scale(1.02); 
+        box-shadow: 6px 6px 0px ${blockTheme.shadowDark};
       }
     }
   `}
@@ -472,24 +499,21 @@ const LockStatusIndicator = styled.div<{ $isLocked: boolean }>`
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   margin: 0.5rem 0;
-  border-radius: 8px;
-  font-weight: 500;
+  border-radius: 12px;
+  font-weight: 600;
   font-size: 0.875rem;
   background: ${({ $isLocked }) => 
     $isLocked 
-      ? 'rgba(239, 68, 68, 0.15)' 
-      : 'rgba(34, 197, 94, 0.15)'
+      ? blockTheme.error 
+      : blockTheme.success
   };
-  border: 1px solid ${({ $isLocked }) => 
-    $isLocked 
-      ? 'rgba(239, 68, 68, 0.3)' 
-      : 'rgba(34, 197, 94, 0.3)'
-  };
+  border: 3px solid ${blockTheme.darkText};
   color: ${({ $isLocked }) => 
     $isLocked 
-      ? '#ef4444' 
-      : '#22c55e'
+      ? blockTheme.lightText 
+      : blockTheme.darkText
   };
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
 `;
 
 // WinningsClaimed event signature (keccak256 of "WinningsClaimed(string,address,uint256)")
@@ -610,6 +634,11 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       gameData.players.forEach(player => allAddresses.add(player));
     }
     
+    // Add judge addresses
+    if (gameData.judges) {
+      gameData.judges.forEach(judge => allAddresses.add(judge));
+    }
+    
     // Convert to array
     const addressesToResolve = Array.from(allAddresses);
     
@@ -642,6 +671,11 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
     // Add player addresses
     if (gameData.players) {
       gameData.players.forEach(player => allAddresses.add(player));
+    }
+    
+    // Add judge addresses
+    if (gameData.judges) {
+      gameData.judges.forEach(judge => allAddresses.add(judge));
     }
     
     // Convert to array - include ALL addresses to ensure ENS resolution for everyone
@@ -1121,9 +1155,15 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         // Remove from winners list
         return prev.filter(addr => addr !== playerAddress);
       } else {
-        // Add to end of winners list (next rank) - limit to 3 winners max
-        if (prev.length >= 3) {
-          setError('Maximum 3 winners allowed');
+        // Determine maximum winners based on prize splits
+        const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 || 
+                                (detailedGame.prizeSplits.length === 1 && detailedGame.prizeSplits[0] === 1000);
+        const maxWinners = isWinnerTakeAll ? 1 : detailedGame.prizeSplits?.length || 3;
+        
+        // Check if we've reached the maximum number of winners
+        if (prev.length >= maxWinners) {
+          const prizeText = maxWinners === 1 ? 'Winner-take-all game' : `Only ${maxWinners} prizes available`;
+          setError(`${prizeText} - maximum ${maxWinners} winner${maxWinners > 1 ? 's' : ''} allowed`);
           return prev;
         }
         return [...prev, playerAddress];
@@ -1141,20 +1181,23 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       setError('Game must be locked before reporting winners. Lock the game first.');
       return;
     }
+
+    // Validate winner count matches prize distribution
+    const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 || 
+                            (detailedGame.prizeSplits.length === 1 && detailedGame.prizeSplits[0] === 1000);
+    const requiredWinners = isWinnerTakeAll ? 1 : detailedGame.prizeSplits?.length || 1;
+    
+    if (selectedWinners.length !== requiredWinners) {
+      const prizeText = isWinnerTakeAll ? 'winner-take-all' : `${requiredWinners} prize${requiredWinners > 1 ? 's' : ''}`;
+      setError(`Must select exactly ${requiredWinners} winner${requiredWinners > 1 ? 's' : ''} for this ${prizeText} game. Only winners with available prizes will receive winnings.`);
+      return;
+    }
     
     try {
       setActionLoading(true);
       setError('');
 
-      // For winner-take-all games (no prize splits), ensure we only submit one winner
       let winnersToSubmit = selectedWinners;
-      const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 || 
-                              (detailedGame.prizeSplits.length === 1 && detailedGame.prizeSplits[0] === 1000);
-                              
-      if (isWinnerTakeAll && selectedWinners.length > 0) {
-        winnersToSubmit = [selectedWinners[0]]; // Only take the first winner for winner-take-all
-        console.log('🏆 Winner-take-all game: submitting only first winner:', winnersToSubmit);
-      }
       
       console.log('Reporting winners in rank order:', winnersToSubmit);
       
@@ -1314,14 +1357,14 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
 
   return (
     <>
-      <GlassModal onClick={onClose}>
-      <GlassModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '80vh', overflow: 'auto' }}>
+      <BlockModal onClick={onClose}>
+      <BlockModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', maxHeight: '80vh', overflow: 'auto' }}>
         <ModalHeader>
           <ModalTitle 
             onClick={handleCopyCode}
             title={isCodeCopied ? "Code copied!" : "Click to copy game code"}
             style={{
-              color: isCodeCopied ? glassTheme.success : undefined
+              color: isCodeCopied ? blockTheme.success : undefined
             }}
           >
             {isCodeCopied ? (
@@ -1333,41 +1376,39 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
               game.code
             )}
           </ModalTitle>
-          <FlexContainer align="center" gap="0.5rem">
+          <FlexBlock align="center" gap="0.5rem">
             {/* Share URL Icon */}
-            <GlassButton
-              variant="secondary"
+            <BlockButton
+              color={isShareCopied ? 'success' : 'pastelBlue'}
               onClick={handleShareGame}
               style={{
                 padding: '0.75rem',
                 fontSize: '0.875rem',
-                background: isShareCopied ? glassTheme.success : 'rgba(255, 255, 255, 0.1)',
                 minWidth: 'auto'
               }}
               title="Copy game page URL"
             >
               {isShareCopied ? <Check size={16} /> : <Share2 size={16} />}
-            </GlassButton>
+            </BlockButton>
 
             {/* Open New Tab Icon */}
-            <GlassButton
-              variant="secondary"
+            <BlockButton
+              color="pastelMint"
               onClick={handleOpenNewTab}
               style={{
                 padding: '0.75rem',
                 fontSize: '0.875rem',
-                background: 'rgba(255, 255, 255, 0.1)',
                 minWidth: 'auto'
               }}
               title="Open game page in new tab"
             >
               <ExternalLink size={16} />
-            </GlassButton>
+            </BlockButton>
 
             <CloseButton onClick={onClose}>
               <X size={20} />
             </CloseButton>
-          </FlexContainer>
+          </FlexBlock>
         </ModalHeader>
 
         {/* Prominent Game Stats at Top */}
@@ -1405,25 +1446,29 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
             gap: '8px',
             margin: '16px 0',
             padding: '12px 16px',
-            background: 'rgba(156, 163, 175, 0.1)',
-            border: '1px solid rgba(156, 163, 175, 0.2)',
+            background: blockTheme.pastelLavender,
+            border: `3px solid ${blockTheme.darkText}`,
             borderRadius: '12px',
             fontSize: '0.875rem',
-            color: '#9ca3af'
+            color: blockTheme.darkText,
+            boxShadow: `4px 4px 0px ${blockTheme.shadowDark}`,
+            fontWeight: 600
           }}>
             <Scale size={16} />
             <span>Judge Decides: </span>
             <span style={{ 
-              color: '#ffffff', 
-              fontWeight: '600',
-              background: 'rgba(156, 163, 175, 0.2)',
-              padding: '2px 8px',
-              borderRadius: '6px'
+              color: blockTheme.darkText, 
+              fontWeight: '700',
+              background: blockTheme.lightText,
+              padding: '4px 8px',
+              borderRadius: '8px',
+              border: `2px solid ${blockTheme.darkText}`,
+              boxShadow: `2px 2px 0px ${blockTheme.shadowDark}`
             }}>
-              {getDisplayNameByAddressSync(detailedGame.judges[0]) || formatAddress(detailedGame.judges[0])}
+              {displayNames.get(detailedGame.judges[0].toLowerCase()) || formatAddress(detailedGame.judges[0])}
             </span>
             {detailedGame.judges.length > 1 && (
-              <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>
+              <span style={{ color: blockTheme.textMuted, fontSize: '0.8rem', fontWeight: 600 }}>
                 +{detailedGame.judges.length - 1} more
               </span>
             )}
@@ -1455,13 +1500,13 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         )}
 
         {loading ? (
-          <FlexContainer justify="center" style={{ padding: '2rem' }}>
-            <LoadingSpinner />
-          </FlexContainer>
+          <FlexBlock justify="center" style={{ padding: '2rem' }}>
+            <SimpleRetroLoader />
+          </FlexBlock>
         ) : (
           <>
             <InfoSection>
-              <h3 style={{ margin: '0 0 1rem 0', color: glassTheme.text }}>Game Information</h3>
+              <h3 style={{ margin: '0 0 1rem 0', color: blockTheme.text }}>Game Information</h3>
               <InfoGrid>
                 {detailedGame.buyIn && (
                   <InfoItem>
@@ -1494,13 +1539,33 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                   <InfoItem>
                     <Trophy size={16} className="icon" />
                     <span className="label">Prize Distribution:</span>
-                    <span className="value" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      {detailedGame.prizeSplits.map((split, index) => (
-                        <span key={index} style={{ fontSize: '0.875rem' }}>
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'} {index + 1}{index === 0 ? 'st' : index === 1 ? 'nd' : 'rd'} Place: {formatPrizeSplit(split)}
-                        </span>
-                      ))}
-                    </span>
+                    <div className="value" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                      {detailedGame.prizeSplits.map((split, index) => {
+                        const colors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+                        const color = colors[index] || '#666';
+                        
+                        return (
+                          <div
+                            key={index}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              padding: '0.25rem 0.5rem',
+                              background: `${color}15`,
+                              border: `1px solid ${color}30`,
+                              borderRadius: '8px',
+                              fontSize: '0.875rem',
+                              fontWeight: '600',
+                              color: color
+                            }}
+                          >
+                            <span>{index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}</span>
+                            <span>{formatPrizeSplit(split)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </InfoItem>
                 )}
                 
@@ -1516,7 +1581,7 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
 
             {detailedGame.players && detailedGame.players.length > 0 && (
               <InfoSection>
-                <h3 style={{ margin: '0 0 1rem 0', color: glassTheme.text }}>
+                <h3 style={{ margin: '0 0 1rem 0', color: blockTheme.text }}>
                   <Users size={20} />Players ({detailedGame.players.length})
                 </h3>
                 <PlayersList>
@@ -1577,106 +1642,124 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
             <ActionSection>
               <h3><Crown size={20} />Actions</h3>
               
-                {/* Lock Game Button (Host Only) */}
+                {/* Start Game Button (Host Only) */}
                 {isHost && !detailedGame.isLocked && (
-                  <GlassButton
-                    variant="secondary"
-                    onClick={handleLockGame}
+                  <BlockButton
+                    color="pastelLavender"
+                    onClick={() => {
+                      const confirmed = window.confirm('Ready to start the game? This will prevent new players from joining.');
+                      if (confirmed) handleLockGame();
+                    }}
                     disabled={actionLoading}
+                    fullWidth
                     style={{ 
-                      width: '100%', 
-                      marginBottom: '1rem',
-                      background: 'rgba(239, 68, 68, 0.1)',
-                      borderColor: 'rgba(239, 68, 68, 0.3)',
-                      color: '#ef4444'
+                      marginBottom: '1rem'
                     }}
                   >
-                    {actionLoading ? <LoadingSpinner /> : (
+                    {actionLoading ? <SimpleRetroLoader /> : (
                       <>
                         <Lock size={16} />
-                        Lock Game (Prevent new players from joining)
+                        Lock Game
                       </>
                     )}
-                  </GlassButton>
+                  </BlockButton>
                 )}
                 
                 {/* Set Prize Distribution Button (Host Only, unlocked games) */}
                 {isHost && !detailedGame.isLocked && (
-                  <GlassButton
-                    variant="secondary"
+                  <BlockButton
+                    color="pastelPeach"
                     onClick={() => setShowPrizeSplitsModal(true)}
                     disabled={actionLoading}
+                    fullWidth
                     style={{ 
-                      width: '100%', 
-                      marginBottom: '1rem',
-                      background: 'rgba(120, 119, 198, 0.1)',
-                      borderColor: 'rgba(120, 119, 198, 0.3)',
-                      color: '#7877c6'
+                      marginBottom: '1rem'
                     }}
                   >
                     <Trophy size={16} />
                     Set Prize Distribution
-                  </GlassButton>
+                  </BlockButton>
                 )}
                 
 
                 {canVote && (
                   <>
                     <StatusMessage variant="info">
-                      Select winners above using the <Trophy size={14} style={{ display: 'inline' }} /> icon. Winners are ranked by selection order (🥇🥈🥉).
-                      {detailedGame.prizeSplits && detailedGame.prizeSplits.length > 0 && (
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
-                          Prize splits: {detailedGame.prizeSplits.map((split, idx) => 
-                            `${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'} ${(split / 10).toFixed(1)}%`
-                          ).join(' • ')}
-                        </div>
-                      )}
+                      {(() => {
+                        const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 || 
+                                                (detailedGame.prizeSplits.length === 1 && detailedGame.prizeSplits[0] === 1000);
+                        const requiredWinners = isWinnerTakeAll ? 1 : detailedGame.prizeSplits?.length || 1;
+                        
+                        return (
+                          <>
+                            Select exactly <strong>{requiredWinners}</strong> winner{requiredWinners > 1 ? 's' : ''} using the <Trophy size={14} style={{ display: 'inline' }} /> icon. Winners are ranked by selection order (🥇🥈🥉). Only winners with available prize positions receive winnings.
+                            {detailedGame.prizeSplits && detailedGame.prizeSplits.length > 0 && !isWinnerTakeAll && (
+                              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                                Prize distribution: {detailedGame.prizeSplits.map((split, idx) => 
+                                  `${idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'} ${(split / 10).toFixed(1)}%`
+                                ).join(' • ')}
+                              </div>
+                            )}
+                            {isWinnerTakeAll && (
+                              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                                Winner-take-all: 🥇 100%
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </StatusMessage>
 
-                    <FlexContainer justify="center">
-                      <GlassButton
-                        variant="primary"
+                    <FlexBlock justify="center">
+                      <BlockButton
+                        color="warning"
                         onClick={handleReportWinners}
-                        disabled={actionLoading || selectedWinners.length === 0}
+                        disabled={actionLoading || (() => {
+                          const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 || 
+                                                  (detailedGame.prizeSplits.length === 1 && detailedGame.prizeSplits[0] === 1000);
+                          const requiredWinners = isWinnerTakeAll ? 1 : detailedGame.prizeSplits?.length || 1;
+                          return selectedWinners.length !== requiredWinners;
+                        })()}
                         size="lg"
                       >
-                        {actionLoading ? <LoadingSpinner /> : (
+                        {actionLoading ? <SimpleRetroLoader /> : (
                           <>
                             <Trophy size={16} />
-                            Report Winners ({selectedWinners.length})
+                            Report Winners ({selectedWinners.length}/{(() => {
+                              const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 || 
+                                                      (detailedGame.prizeSplits.length === 1 && detailedGame.prizeSplits[0] === 1000);
+                              return isWinnerTakeAll ? 1 : detailedGame.prizeSplits?.length || 1;
+                            })()})
                           </>
                         )}
-                      </GlassButton>
-                    </FlexContainer>
+                      </BlockButton>
+                    </FlexBlock>
                   </>
                 )}
-            </ActionSection>
-
-            {/* Claim Winnings Action */}
-            {isPlayer && (
-              <ActionSection>
-                <h3><Users size={20} />Claim Winnings</h3>
                 
-                {detailedGame.isWinnerConfirmed ? (
-                  <StatusMessage variant="success">
-                    🎉 Congratulations! You've been confirmed as a winner.
-                  </StatusMessage>
-                ) : (
-                  <StatusMessage variant="info">
-                    Waiting for game results and judge confirmations.
-                  </StatusMessage>
+                {/* Claim Winnings Button (Players who are confirmed winners) */}
+                {isPlayer && Array.from(winnerStatuses.entries()).some(([addr, isWinner]) => 
+                  addr.toLowerCase() === account?.address?.toLowerCase() && isWinner
+                ) && (
+                  <BlockButton
+                    color={account?.address && claimedStatuses.has(account.address.toLowerCase()) ? 'success' : 'warning'}
+                    onClick={handleClaimWinnings}
+                    disabled={actionLoading || (account?.address && claimedStatuses.has(account.address.toLowerCase()))}
+                    fullWidth
+                    style={{ 
+                      marginBottom: '1rem'
+                    }}
+                  >
+                    {actionLoading ? <SimpleRetroLoader /> : (
+                      account?.address && claimedStatuses.has(account.address.toLowerCase()) ? (
+                        <>✅ Winnings Claimed</>
+                      ) : (
+                        <><Trophy size={16} />Claim Your Winnings</>
+                      )
+                    )}
+                  </BlockButton>
                 )}
-                
-                <GlassButton
-                  variant="primary"
-                  onClick={handleClaimWinnings}
-                  disabled={actionLoading}
-                  style={{ width: '100%' }}
-                >
-                  {actionLoading ? <LoadingSpinner /> : <><Trophy size={16} />Claim Winnings</>}
-                </GlassButton>
-              </ActionSection>
-            )}
+            </ActionSection>
 
             {/* Join Game Action */}
             {canJoin && (
@@ -1687,15 +1770,24 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                   You can join this game for {detailedGame.buyIn ? formatEth(detailedGame.buyIn) : '?'} ETH
                 </StatusMessage>
                 
-                <GlassButton
-                  variant="primary"
+                <BlockButton
+                  color="pastelPink"
                   onClick={handleJoinGame}
                   disabled={actionLoading}
-                  style={{ width: '100%' }}
+                  fullWidth
                 >
-                  {actionLoading ? <LoadingSpinner /> : <><Users size={16} />Join Game</>}
-                </GlassButton>
+                  {actionLoading ? <SimpleRetroLoader /> : <><Users size={16} />Join Game</>}
+                </BlockButton>
               </ActionSection>
+            )}
+            
+            {/* Information for Players Not Yet Winners */}
+            {isPlayer && !Array.from(winnerStatuses.entries()).some(([addr, isWinner]) => 
+              addr.toLowerCase() === account?.address?.toLowerCase() && isWinner
+            ) && (
+              <StatusMessage variant="info">
+                🎲 Game in progress - waiting for results to be reported.
+              </StatusMessage>
             )}
 
             {/* No actions available */}
@@ -1709,8 +1801,8 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
             )}
           </>
         )}
-      </GlassModalContent>
-      </GlassModal>
+      </BlockModalContent>
+      </BlockModal>
       
       {/* Prize Splits Modal - Rendered outside GameDetailModal */}
       {showPrizeSplitsModal && (

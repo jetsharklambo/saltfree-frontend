@@ -457,8 +457,9 @@ const safeReadContract = async (options: any) => {
 const checkUserWinnerStatus = async (
   contract: any, 
   gameCode: string, 
-  userAddress: string
-): Promise<{ isWinner: boolean; isConfirmed: boolean; hasClaimed: boolean }> => {
+  userAddress: string,
+  prizeSplits?: number[]
+): Promise<{ isWinner: boolean; isConfirmed: boolean; hasClaimed: boolean; hasActualPrize?: boolean; winnerPosition?: number }> => {
   try {
     // Check if user is a confirmed winner
     const isConfirmed = await safeReadContract({
@@ -467,9 +468,44 @@ const checkUserWinnerStatus = async (
       params: [gameCode, userAddress]
     }) as boolean;
 
+    let hasActualPrize = false;
+    let winnerPosition: number | undefined;
+
+    // If user is confirmed as winner, check their position and if that position has a prize
+    if (isConfirmed) {
+      try {
+        // Get the winners array to find user's position
+        const winners = await safeReadContract({
+          contract,
+          method: "function getWinners(string code) view returns (address[] winners)",
+          params: [gameCode]
+        }) as string[];
+
+        // Find user's position in winners array (1-based indexing for display)
+        const userIndex = winners.findIndex(addr => addr.toLowerCase() === userAddress.toLowerCase());
+        if (userIndex >= 0) {
+          winnerPosition = userIndex + 1; // 1-based position (1st, 2nd, 3rd)
+          
+          // Check if this position has an actual prize
+          if (prizeSplits && prizeSplits.length > userIndex) {
+            hasActualPrize = true;
+          } else if (!prizeSplits || prizeSplits.length === 0) {
+            // Winner-take-all game, only 1st place gets prize
+            hasActualPrize = userIndex === 0;
+          }
+        }
+      } catch (error) {
+        console.warn('Could not get winner position:', error);
+        // If we can't get position info, assume they have a prize to be safe
+        hasActualPrize = true;
+      }
+    }
+
     return {
-      isWinner: isConfirmed,
+      isWinner: isConfirmed && hasActualPrize, // Only true if they actually get a prize
       isConfirmed,
+      hasActualPrize,
+      winnerPosition,
       hasClaimed: false // We'll check this via events if needed
     };
   } catch (error) {
@@ -525,6 +561,9 @@ export interface GameData {
   winnerAddresses?: string[];
   isUserWinner?: boolean;
   hasUserClaimedWinnings?: boolean;
+  // Winner position and prize info
+  userWinnerPosition?: number;
+  userHasActualPrize?: boolean;
   // Game completion status
   isCompleted?: boolean;
   totalWinningsClaimed?: string;
@@ -892,10 +931,12 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Check winner status for user if they're involved in the game
         if (gameData.userRole !== 'unknown') {
           try {
-            const winnerStatus = await checkUserWinnerStatus(contract, gameCode, userAddress);
+            const winnerStatus = await checkUserWinnerStatus(contract, gameCode, userAddress, gameData.prizeSplits);
             gameData.isUserWinner = winnerStatus.isWinner;
             gameData.isWinnerConfirmed = winnerStatus.isConfirmed;
             gameData.hasUserClaimedWinnings = winnerStatus.hasClaimed;
+            gameData.userWinnerPosition = winnerStatus.winnerPosition;
+            gameData.userHasActualPrize = winnerStatus.hasActualPrize;
             
             if (winnerStatus.isWinner) {
               console.log(`🏆 User is confirmed winner for game ${gameCode}`);

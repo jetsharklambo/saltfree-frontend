@@ -2,21 +2,17 @@ import React from 'react';
 import styled from '@emotion/styled';
 import { keyframes } from '@emotion/react';
 import { Trophy, Crown, Star } from 'lucide-react';
-import { glassTheme } from '../styles/glass';
+import { blockTheme } from '../styles/blocks';
 
-// Winner badge animations
-const goldGlow = keyframes`
+// Block-style winner animations
+const blockWinnerPulse = keyframes`
   0%, 100% { 
-    box-shadow: 
-      0 0 20px rgba(255, 215, 0, 0.4),
-      0 0 40px rgba(255, 215, 0, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow: 8px 8px 0px ${blockTheme.shadowDark};
+    transform: translateY(0px) scale(1);
   }
   50% { 
-    box-shadow: 
-      0 0 30px rgba(255, 215, 0, 0.6),
-      0 0 60px rgba(255, 215, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    box-shadow: 10px 10px 0px ${blockTheme.shadowDark};
+    transform: translateY(-3px) scale(1.02);
   }
 `;
 
@@ -27,10 +23,10 @@ const sparkle = keyframes`
   75% { opacity: 1; transform: scale(1.1) rotate(270deg); }
 `;
 
-const bounce = keyframes`
-  0%, 20%, 53%, 80%, 100% { transform: translateY(0); }
-  40%, 43% { transform: translateY(-8px); }
-  70% { transform: translateY(-4px); }
+const blockBounce = keyframes`
+  0%, 20%, 53%, 80%, 100% { transform: translateY(0) rotate(0deg); }
+  40%, 43% { transform: translateY(-6px) rotate(5deg); }
+  70% { transform: translateY(-3px) rotate(-3deg); }
 `;
 
 // Styled components
@@ -50,24 +46,18 @@ const WinnerBadgeContainer = styled.div<{ variant: 'trophy' | 'crown' | 'star'; 
   background: ${({ variant }) => {
     switch (variant) {
       case 'crown':
-        return 'linear-gradient(135deg, rgba(255, 215, 0, 0.9), rgba(255, 193, 7, 0.9), rgba(255, 171, 0, 0.9))';
+        return blockTheme.pastelYellow;
       case 'star':
-        return 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(240, 248, 255, 0.9))';
+        return blockTheme.lightText;
       default:
-        return 'linear-gradient(135deg, rgba(255, 215, 0, 0.9), rgba(255, 193, 7, 0.9))';
+        return blockTheme.pastelPeach;
     }
   }};
   
-  border: 2px solid ${({ variant }) => {
-    switch (variant) {
-      case 'crown': return 'rgba(255, 215, 0, 0.8)';
-      case 'star': return 'rgba(255, 255, 255, 0.8)';
-      default: return 'rgba(255, 193, 7, 0.8)';
-    }
-  }};
+  border: 4px solid ${blockTheme.darkText};
   
-  border-radius: 12px;
-  color: ${({ variant }) => variant === 'star' ? '#1a1a1a' : '#1a1a1a'};
+  border-radius: 16px;
+  color: ${blockTheme.darkText};
   font-size: ${({ size = 'md' }) => {
     switch (size) {
       case 'sm': return '0.75rem';
@@ -75,26 +65,34 @@ const WinnerBadgeContainer = styled.div<{ variant: 'trophy' | 'crown' | 'star'; 
       default: return '0.85rem';
     }
   }};
-  font-weight: 700;
-  text-shadow: ${({ variant }) => variant === 'star' ? '0 1px 2px rgba(0,0,0,0.1)' : '0 1px 2px rgba(0,0,0,0.2)'};
+  font-weight: 800;
+  text-shadow: none;
+  box-shadow: 8px 8px 0px ${blockTheme.shadowDark};
   
-  animation: ${goldGlow} 3s ease-in-out infinite;
+  animation: ${blockWinnerPulse} 3s ease-in-out infinite;
   
   .icon {
-    animation: ${bounce} 2s infinite;
+    animation: ${blockBounce} 2s infinite;
   }
   
   &:hover {
-    transform: scale(1.05);
-    transition: transform 0.2s ease;
+    transform: translateY(2px);
+    box-shadow: 6px 6px 0px ${blockTheme.shadowMedium};
+    transition: all 0.2s ease;
+  }
+  
+  &:active {
+    transform: translateY(4px);
+    box-shadow: 4px 4px 0px ${blockTheme.shadowMedium};
   }
 `;
 
 const SparkleIcon = styled.div`
   position: absolute;
-  color: rgba(255, 215, 0, 0.8);
+  color: ${blockTheme.darkText};
   animation: ${sparkle} 2s ease-in-out infinite;
   pointer-events: none;
+  filter: drop-shadow(2px 2px 0px ${blockTheme.shadowMedium});
   
   &.sparkle-1 { top: -8px; right: -8px; animation-delay: 0s; }
   &.sparkle-2 { top: -4px; left: -8px; animation-delay: 0.5s; }
