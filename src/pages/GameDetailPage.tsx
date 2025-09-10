@@ -565,6 +565,7 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
         let actualGameCode = '';
         let host = '';
         let buyIn: bigint = BigInt(0);
+        let gameToken = '';
         let maxPlayers = BigInt(0);
         let playerCount = BigInt(0);
         let isLocked = false;
@@ -582,9 +583,9 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
               contract,
               method: "function getGameInfo(string code) view returns (address host, address token, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
               params: [codeVariation],
-            }) as [string, bigint, bigint, bigint, boolean, bigint[], string[]];
+            }) as [string, string, bigint, bigint, bigint, boolean, bigint[], string[]];
 
-            const [gameHost, gameToken, gameBuyIn, gameMaxPlayers, gamePlayerCount, gameIsLocked, prizeSplitsBigInt, gameJudges] = gameInfo;
+            const [gameHost, contractGameToken, gameBuyIn, gameMaxPlayers, gamePlayerCount, gameIsLocked, prizeSplitsBigInt, gameJudges] = gameInfo;
 
             // Check if game exists (host would be zero address if not)
             if (gameHost !== '0x0000000000000000000000000000000000000000') {
@@ -592,6 +593,7 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
               actualGameCode = codeVariation;
               host = gameHost;
               buyIn = gameBuyIn;
+              gameToken = contractGameToken;
               maxPlayers = gameMaxPlayers;
               playerCount = gamePlayerCount;
               isLocked = gameIsLocked;
