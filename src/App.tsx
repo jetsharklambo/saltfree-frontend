@@ -217,7 +217,7 @@ function WalletControls() {
         {account && (
           <BuyTokensButton onClick={() => setShowBuyTokensModal(true)}>
             <CreditCard size={20} />
-            Buy Tokens
+            Cash In/Out
           </BuyTokensButton>
         )}
         <StyledConnectButton>

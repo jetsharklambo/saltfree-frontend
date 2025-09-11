@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useActiveAccount } from "thirdweb/react";
 import { BuyWidget } from "thirdweb/react";
-import { X, CreditCard, Wallet, Info } from 'lucide-react';
+import { X, CreditCard, Wallet, Info, ArrowDown, ArrowUp, Coins } from 'lucide-react';
 import { client, chain, BASE_TOKENS, formatAddress } from '../thirdweb';
+import { ethereum } from 'thirdweb/chains';
+import { getBalance } from 'thirdweb/extensions/erc20';
+import { eth_getBalance } from 'thirdweb/rpc';
+import { getRpcClient } from 'thirdweb/rpc';
 import { 
   BlockModal, 
   BlockModalContent, 
-  BlockButton,
-  FlexBlock,
   blockTheme
 } from '../styles/blocks';
 import styled from '@emotion/styled';
-import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 
 interface BuyTokensModalProps {
@@ -19,6 +20,7 @@ interface BuyTokensModalProps {
   onSuccess?: () => void;
   defaultToken?: 'ETH' | 'USDC';
   defaultAmount?: string;
+  defaultMode?: 'cashin' | 'cashout';
 }
 
 const ModalHeader = styled.div`
@@ -127,7 +129,7 @@ const TokenTabs = styled.div`
 const TokenTab = styled.button<{ $active: boolean }>`
   flex: 1;
   padding: 0.75rem;
-  background: ${props => props.$active ? blockTheme.pastelLavender : blockTheme.pastelGray};
+  background: ${props => props.$active ? blockTheme.pastelLavender : 'transparent'};
   border: 3px solid ${blockTheme.darkText};
   border-radius: 8px;
   font-size: 1rem;
@@ -172,7 +174,7 @@ const BuyWidgetContainer = styled.div`
 const FooterNote = styled.div`
   margin-top: 1.5rem;
   padding: 1rem;
-  background: ${blockTheme.pastelGray};
+  background: ${blockTheme.pastelBlue};
   border: 2px solid ${blockTheme.darkText};
   border-radius: 8px;
   font-size: 0.85rem;
@@ -181,28 +183,237 @@ const FooterNote = styled.div`
   line-height: 1.5;
 `;
 
+const ModeSwitch = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  background: ${blockTheme.pastelBlue};
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 12px;
+  padding: 0.5rem;
+`;
+
+const ModeButton = styled.button<{ $active: boolean }>`
+  flex: 1;
+  padding: 0.75rem;
+  background: ${props => props.$active ? blockTheme.pastelLavender : 'transparent'};
+  border: ${props => props.$active ? `2px solid ${blockTheme.darkText}` : 'none'};
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: ${blockTheme.darkText};
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  
+  &:hover {
+    background: ${props => props.$active ? blockTheme.pastelLavender : blockTheme.pastelBlue};
+  }
+  
+  &:active {
+    transform: scale(0.98);
+  }
+`;
+
+const BalanceDisplay = styled.div`
+  background: ${blockTheme.pastelMint};
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const BalanceInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`;
+
+const BalanceLabel = styled.span`
+  font-size: 0.9rem;
+  color: ${blockTheme.darkText};
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const BalanceAmount = styled.span`
+  font-family: monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: ${blockTheme.darkText};
+  background: ${blockTheme.pastelYellow};
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 2px solid ${blockTheme.darkText};
+`;
+
+const MaxButton = styled.button`
+  background: ${blockTheme.pastelCoral};
+  border: 2px solid ${blockTheme.darkText};
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: ${blockTheme.darkText};
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: ${blockTheme.pastelPink};
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+
 const BuyTokensModal: React.FC<BuyTokensModalProps> = ({ 
   onClose, 
   onSuccess,
   defaultToken = 'ETH',
-  defaultAmount = '0.01'
+  defaultAmount = '0.01',
+  defaultMode = 'cashin'
 }) => {
   const account = useActiveAccount();
   const [selectedToken, setSelectedToken] = useState<'ETH' | 'USDC'>(defaultToken);
   const [amount, setAmount] = useState(defaultAmount);
+  const [mode, setMode] = useState<'cashin' | 'cashout'>(defaultMode);
+  const [baseEthBalance, setBaseEthBalance] = useState<string>('0');
+  const [baseUsdcBalance, setBaseUsdcBalance] = useState<string>('0');
+  const [loadingBalance, setLoadingBalance] = useState(false);
+
+  // Mainnet token definitions
+  const MAINNET_TOKENS = {
+    ETH: {
+      address: "0x0000000000000000000000000000000000000000", // ETH on mainnet
+      symbol: "ETH",
+      name: "Ethereum",
+      decimals: 18,
+      icon: BASE_TOKENS.ETH.icon
+    },
+    USDC: {
+      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC on mainnet
+      symbol: "USDC", 
+      name: "USD Coin",
+      decimals: 6,
+      icon: BASE_TOKENS.USDC.icon
+    }
+  };
+
+  // Fetch Base network balances for cash out mode
+  useEffect(() => {
+    const fetchBaseBalances = async () => {
+      if (!account || mode !== 'cashout') return;
+
+      setLoadingBalance(true);
+      try {
+        console.log('Fetching Base balances for address:', account.address);
+        
+        // Fetch ETH balance on Base using proper Thirdweb RPC client
+        const rpcClient = getRpcClient({ client, chain });
+        
+        const ethBalanceWei = await eth_getBalance(rpcClient, {
+          address: account.address,
+          blockTag: 'latest'
+        });
+        
+        console.log('Raw ETH balance (wei):', ethBalanceWei.toString());
+        
+        // Convert BigInt to ETH with proper precision handling
+        const ethBalanceStr = ethBalanceWei.toString();
+        const ethBalance = (parseFloat(ethBalanceStr) / 1e18).toFixed(6);
+        
+        console.log('Converted ETH balance:', ethBalance);
+        setBaseEthBalance(ethBalance);
+
+        // Fetch USDC balance on Base
+        console.log('Fetching USDC balance from contract:', BASE_TOKENS.USDC.address);
+        const usdcBalance = await getBalance({
+          contract: {
+            client,
+            chain,
+            address: BASE_TOKENS.USDC.address as `0x${string}`,
+          },
+          address: account.address,
+        });
+        
+        console.log('Raw USDC balance:', usdcBalance);
+        const usdcBalanceFormatted = parseFloat(usdcBalance.displayValue).toFixed(2);
+        console.log('Formatted USDC balance:', usdcBalanceFormatted);
+        setBaseUsdcBalance(usdcBalanceFormatted);
+        
+      } catch (error) {
+        console.error('Failed to fetch Base balances - Full error details:', error);
+        console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
+        console.error('Account address:', account.address);
+        console.error('Chain:', chain);
+        
+        // Show user-friendly error in UI
+        toast.error('Failed to load Base network balances. Please try again.');
+        
+        // Set balances to 0 as fallback
+        setBaseEthBalance('0');
+        setBaseUsdcBalance('0');
+      } finally {
+        setLoadingBalance(false);
+      }
+    };
+
+    fetchBaseBalances();
+  }, [account, mode]);
+
+  // Auto-populate amount with full balance when in cash out mode and token changes
+  useEffect(() => {
+    if (mode === 'cashout' && !loadingBalance) {
+      const balance = selectedToken === 'ETH' ? baseEthBalance : baseUsdcBalance;
+      setAmount(balance);
+    }
+  }, [mode, selectedToken, baseEthBalance, baseUsdcBalance, loadingBalance]);
+
+  const handleTokenSwitch = (token: 'ETH' | 'USDC') => {
+    setSelectedToken(token);
+    if (mode === 'cashout' && !loadingBalance) {
+      const balance = token === 'ETH' ? baseEthBalance : baseUsdcBalance;
+      setAmount(balance);
+    }
+  };
+
+  const handleMaxClick = () => {
+    if (mode === 'cashout') {
+      const balance = selectedToken === 'ETH' ? baseEthBalance : baseUsdcBalance;
+      setAmount(balance);
+    }
+  };
 
   const handleSuccess = () => {
-    toast.success('Token purchase initiated! Check your wallet for the transaction.');
+    const message = mode === 'cashin' 
+      ? 'Token purchase initiated! Check your wallet for the transaction.'
+      : 'Bridge transaction initiated! Check your wallet for the transaction.';
+    toast.success(message);
     if (onSuccess) {
       onSuccess();
     }
-    // Keep modal open so user can complete the purchase
+    // Keep modal open so user can complete the transaction
   };
 
   const handleError = (error: any) => {
-    console.error('Purchase error:', error);
-    toast.error('Failed to initiate purchase. Please try again.');
+    console.error('Transaction error:', error);
+    const message = mode === 'cashin'
+      ? 'Failed to initiate purchase. Please try again.'
+      : 'Failed to initiate bridge transaction. Please try again.';
+    toast.error(message);
   };
+
 
   if (!account) {
     return (
@@ -211,7 +422,7 @@ const BuyTokensModal: React.FC<BuyTokensModalProps> = ({
           <ModalHeader>
             <ModalTitle>
               <CreditCard size={24} />
-              Buy Tokens
+              Cash In/Out
             </ModalTitle>
             <CloseButton onClick={onClose}>
               <X size={20} />
@@ -221,7 +432,7 @@ const BuyTokensModal: React.FC<BuyTokensModalProps> = ({
           <InfoBox>
             <Info size={20} />
             <InfoText>
-              Please connect your wallet first to buy tokens.
+              Please connect your wallet first to access cash in/out features.
             </InfoText>
           </InfoBox>
         </BlockModalContent>
@@ -229,29 +440,44 @@ const BuyTokensModal: React.FC<BuyTokensModalProps> = ({
     );
   }
 
-  const tokenAddress = selectedToken === 'ETH' 
-    ? BASE_TOKENS.ETH.address 
-    : BASE_TOKENS.USDC.address;
+  // Get the appropriate token address and chain based on mode
+  const currentTokens = mode === 'cashin' ? BASE_TOKENS : MAINNET_TOKENS;
+  const currentChain = mode === 'cashin' ? chain : ethereum;
+  const tokenAddress = (selectedToken === 'ETH' 
+    ? currentTokens.ETH.address 
+    : currentTokens.USDC.address) as `0x${string}`;
 
   return (
     <BlockModal onClick={onClose}>
       <BlockModalContent 
         onClick={(e) => e.stopPropagation()}
-        as={motion.div}
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        transition={{ duration: 0.2 }}
       >
         <ModalHeader>
           <ModalTitle>
-            <CreditCard size={24} />
-            Buy Tokens with Fiat
+            {mode === 'cashin' ? <ArrowDown size={24} /> : <ArrowUp size={24} />}
+            {mode === 'cashin' ? 'Cash In - Buy Tokens' : 'Cash Out - Bridge to Mainnet'}
           </ModalTitle>
           <CloseButton onClick={onClose}>
             <X size={20} />
           </CloseButton>
         </ModalHeader>
+
+        <ModeSwitch>
+          <ModeButton 
+            $active={mode === 'cashin'}
+            onClick={() => setMode('cashin')}
+          >
+            <ArrowDown size={18} />
+            Cash In
+          </ModeButton>
+          <ModeButton 
+            $active={mode === 'cashout'}
+            onClick={() => setMode('cashout')}
+          >
+            <ArrowUp size={18} />
+            Cash Out
+          </ModeButton>
+        </ModeSwitch>
 
         <WalletInfo>
           <WalletLabel>
@@ -266,44 +492,113 @@ const BuyTokensModal: React.FC<BuyTokensModalProps> = ({
         <InfoBox>
           <Info size={20} />
           <InfoText>
-            <strong>Buy tokens instantly with your credit card or bank transfer.</strong><br />
-            Powered by Thirdweb's secure payment partners. KYC may be required for first-time purchases.
+            {mode === 'cashin' ? (
+              <>
+                <strong>Buy tokens instantly with your credit card or bank transfer.</strong><br />
+                Powered by Thirdweb's secure payment partners. KYC may be required for first-time purchases.
+              </>
+            ) : (
+              <>
+                <strong>Transfer your Base tokens to Ethereum mainnet.</strong><br />
+                Your Base balance is shown above. Use the amount you want to bridge to mainnet.
+              </>
+            )}
           </InfoText>
         </InfoBox>
 
-        <TokenTabs>
-          <TokenTab 
-            $active={selectedToken === 'ETH'}
-            onClick={() => setSelectedToken('ETH')}
-          >
-            <img src={BASE_TOKENS.ETH.icon} alt="ETH" />
-            ETH
-          </TokenTab>
-          <TokenTab 
-            $active={selectedToken === 'USDC'}
-            onClick={() => setSelectedToken('USDC')}
-          >
-            <img src={BASE_TOKENS.USDC.icon} alt="USDC" />
-            USDC
-          </TokenTab>
-        </TokenTabs>
+        {mode === 'cashin' && (
+          <>
+            <TokenTabs>
+              <TokenTab 
+                $active={selectedToken === 'ETH'}
+                onClick={() => handleTokenSwitch('ETH')}
+              >
+                <img src={BASE_TOKENS.ETH.icon} alt="ETH" />
+                ETH
+              </TokenTab>
+              <TokenTab 
+                $active={selectedToken === 'USDC'}
+                onClick={() => handleTokenSwitch('USDC')}
+              >
+                <img src={BASE_TOKENS.USDC.icon} alt="USDC" />
+                USDC
+              </TokenTab>
+            </TokenTabs>
 
-        <BuyWidgetContainer>
-          <BuyWidget
-            client={client}
-            chain={chain}
-            tokenAddress={tokenAddress}
-            amount={amount}
-            walletAddress={account.address}
-            onSuccess={handleSuccess}
-            onError={handleError}
-            theme="light"
-          />
-        </BuyWidgetContainer>
+            <BuyWidgetContainer>
+              <BuyWidget
+                client={client}
+                chain={chain}
+                tokenAddress={tokenAddress}
+                amount={amount}
+                onSuccess={handleSuccess}
+                onError={handleError}
+                theme="light"
+              />
+            </BuyWidgetContainer>
+          </>
+        )}
+
+        {mode === 'cashout' && (
+          <>
+            <BalanceDisplay>
+              <BalanceInfo>
+                <BalanceLabel>
+                  <Coins size={18} />
+                  Base {selectedToken} Balance:
+                </BalanceLabel>
+                <BalanceAmount>
+                  {loadingBalance ? '...' : `${selectedToken === 'ETH' ? baseEthBalance : baseUsdcBalance} ${selectedToken}`}
+                </BalanceAmount>
+              </BalanceInfo>
+              <MaxButton onClick={handleMaxClick}>
+                Use Max
+              </MaxButton>
+            </BalanceDisplay>
+
+            <TokenTabs>
+              <TokenTab 
+                $active={selectedToken === 'ETH'}
+                onClick={() => handleTokenSwitch('ETH')}
+              >
+                <img src={MAINNET_TOKENS.ETH.icon} alt="ETH" />
+                ETH (Mainnet)
+              </TokenTab>
+              <TokenTab 
+                $active={selectedToken === 'USDC'}
+                onClick={() => handleTokenSwitch('USDC')}
+              >
+                <img src={MAINNET_TOKENS.USDC.icon} alt="USDC" />
+                USDC (Mainnet)
+              </TokenTab>
+            </TokenTabs>
+
+            <BuyWidgetContainer>
+              <BuyWidget
+                client={client}
+                chain={currentChain}
+                tokenAddress={tokenAddress}
+                amount={amount}
+                onSuccess={handleSuccess}
+                onError={handleError}
+                theme="light"
+              />
+            </BuyWidgetContainer>
+          </>
+        )}
 
         <FooterNote>
-          <strong>Note:</strong> Fiat-to-crypto purchases are processed by third-party providers. 
-          Fees and processing times may vary. Tokens will be sent directly to your connected wallet on Base network.
+          <strong>Note:</strong> {mode === 'cashin' ? (
+            <>
+              Fiat-to-crypto purchases are processed by third-party providers. 
+              Fees and processing times may vary. Tokens will be sent directly to your connected wallet on Base network.
+            </>
+          ) : (
+            <>
+              Bridge transactions transfer your Base tokens to Ethereum mainnet. 
+              The amount will be deducted from your Base balance and delivered to the same wallet on mainnet.
+            </>
+          )}
         </FooterNote>
       </BlockModalContent>
     </BlockModal>
