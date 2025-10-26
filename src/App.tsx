@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { ThirdwebProvider, ConnectButton, useActiveAccount } from 'thirdweb/react';
+import { ThirdwebProvider, ConnectButton, useActiveAccount, useActiveWalletChain } from 'thirdweb/react';
 import { Toaster } from 'react-hot-toast';
-import { client, chain } from './thirdweb';
+import { client, base, ethereum } from './thirdweb';
 import GameDashboard from './components/GameDashboard';
 import GameDetailPage from './pages/GameDetailPage';
 import MultiGamePage from './pages/MultiGamePage';
@@ -209,21 +209,51 @@ const MainContent = styled.main`
 // Wallet Controls Component
 function WalletControls() {
   const account = useActiveAccount();
+  const activeChain = useActiveWalletChain();
   const [showBuyTokensModal, setShowBuyTokensModal] = useState(false);
+
+  // Check if user is on Ethereum mainnet
+  const isOnEthereum = activeChain?.id === ethereum.id;
 
   return (
     <>
       <WalletBar>
         {account && (
-          <BuyTokensButton onClick={() => setShowBuyTokensModal(true)}>
-            <CreditCard size={20} />
-            Cash In/Out
-          </BuyTokensButton>
+          <>
+            {isOnEthereum ? (
+              // On Ethereum - show ConnectButton styled as wallet button
+              <StyledConnectButton>
+                <ConnectButton 
+                  client={client}
+                  chain={ethereum}
+                  chains={[ethereum]}
+                />
+              </StyledConnectButton>
+            ) : (
+              // On Base or other networks - show Cash In/Out button
+              <BuyTokensButton onClick={() => setShowBuyTokensModal(true)}>
+                <CreditCard size={20} />
+                Cash In/Out
+              </BuyTokensButton>
+            )}
+          </>
         )}
         <StyledConnectButton>
           <ConnectButton 
             client={client}
-            chain={chain}
+            chains={[base, ethereum]}
+            chain={base}
+            switchButton={{
+              label: "Connect to Base to Play",
+              style: {
+                background: `${blockTheme.pastelYellow} !important`,
+                border: `3px solid ${blockTheme.darkText} !important`,
+                borderRadius: "12px !important",
+                color: `${blockTheme.darkText} !important`,
+                fontWeight: "700 !important",
+                padding: "0.75rem 1.5rem !important",
+              }
+            }}
           />
         </StyledConnectButton>
       </WalletBar>

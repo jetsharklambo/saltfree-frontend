@@ -4,6 +4,7 @@ import { prepareContractCall, sendTransaction, waitForReceipt, readContract } fr
 import toast from 'react-hot-toast';
 import { X, Users, Coins, Clock, Crown, Trophy, AlertCircle, Scale, Lock, Unlock, Copy, Share2, ExternalLink, Check } from 'lucide-react';
 import { getGameContract, formatAddress, formatEth, decodeStringFromHex, formatPrizeSplit, formatTokenDisplay, ensureTokenApproval, isETH } from '../thirdweb';
+import { gaslessJoinGame, gaslessLockGame, gaslessReportWinners, gaslessClaimWinnings } from '../utils/gaslessHelper';
 import { logBuyInInfo, formatBuyInForDisplay } from '../utils/buyInUtils';
 import { getDisplayNameByAddressSync, preloadUsernames, preloadDisplayNames, getDisplayNamesByAddresses, getDisplayNameInfo } from '../utils/userUtils';
 import { useUser } from '../contexts/UserContext';
@@ -35,7 +36,7 @@ interface DetailedGameData extends GameData {
   players?: string[];
   judges?: string[];
   isWinnerConfirmed?: boolean;
-  isLocked?: boolean;
+  locked?: boolean;
   prizeSplits?: number[];
 }
 
@@ -739,7 +740,7 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       const [gameInfo, players, judges] = await Promise.allSettled([
         readContract({
           contract,
-          method: "function getGameInfo(string code) view returns (address host, address token, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
+          method: "function getGameInfo(string code) view returns (address host, address token, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool locked, uint256[] splits, address[] judges)",
           params: [game.code]
         }),
         readContract({
@@ -768,14 +769,14 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
       });
 
       if (gameInfo.status === 'fulfilled') {
-        const [host, token, buyIn, maxPlayers, playerCount, isLocked, prizeSplitsBigInt, inGameJudgesFromGameInfo] = gameInfo.value as [string, string, bigint, bigint, bigint, boolean, bigint[], string[]];
+        const [host, token, buyIn, maxPlayers, playerCount, locked, prizeSplitsBigInt, inGameJudgesFromGameInfo] = gameInfo.value as [string, string, bigint, bigint, bigint, boolean, bigint[], string[]];
         const prizeSplits = prizeSplitsBigInt.map(split => Number(split));
-        
-        console.log(`🔍 GameDetailModal for ${game.code}: buyIn=${buyIn.toString()}, maxPlayers=${maxPlayers.toString()}, isLocked=${isLocked}, prizeSplits=${prizeSplits}`);
-        
+
+        console.log(`🔍 GameDetailModal for ${game.code}: buyIn=${buyIn.toString()}, maxPlayers=${maxPlayers.toString()}, locked=${locked}, prizeSplits=${prizeSplits}`);
+
         // Log the contract data for debugging
         logBuyInInfo('GameDetailModal loadGameDetails', game.code, buyIn, 'direct contract return');
-        
+
         updatedGame = {
           ...updatedGame,
           host: host,
@@ -783,7 +784,7 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
           buyInToken: token,
           maxPlayers: Number(maxPlayers),
           playerCount: Number(playerCount),
-          isLocked: isLocked,
+          locked: locked,
           prizeSplits: prizeSplits
         };
       } else if (gameInfo.status === 'rejected') {
@@ -822,12 +823,14 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
           const winnerChecks = await Promise.allSettled(
             updatedGame.players.map(async (playerAddress) => {
               try {
-                const isConfirmed = await readContract({
+                // Check if player has winnings to claim (getWinnerPayout returns > 0 if they're a winner)
+                const payout = await readContract({
                   contract,
-                  method: "function isWinnerConfirmed(string code, address winner) view returns (bool)",
+                  method: "function getWinnerPayout(string code, address winner) view returns (uint256)",
                   params: [game.code, playerAddress]
                 });
-                return { address: playerAddress, isWinner: isConfirmed as boolean };
+                const isWinner = payout > 0n;
+                return { address: playerAddress, isWinner };
               } catch (err) {
                 console.log(`Could not check winner status for ${playerAddress}`);
                 return { address: playerAddress, isWinner: false };
@@ -1039,90 +1042,47 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         toast.loading('Joining game...', { id: 'join-game' });
       }
       
-      // Prepare transaction based on payment type
-      const transaction = prepareContractCall({
+      // Join game via direct transaction (users pay their own gas + buy-in)
+      console.log('🚀 Joining game...');
+
+      toast.loading('Submitting transaction...', { id: 'join-game' });
+
+      const tx = prepareContractCall({
         contract,
         method: "function joinGame(string code) payable",
         params: [game.code],
-        value: isEthPayment ? buyInWei : 0n, // Only send ETH for ETH payments
-      });
-      
-      console.log('🔧 GameDetailModal Debug - Transaction Prepared:');
-      console.log(`  - Method: "function joinGame(string code) payable"`);
-      console.log(`  - Params: [${JSON.stringify(game.code)}]`);
-      console.log(`  - Value: ${isEthPayment ? buyInWei.toString() : '0'} wei`);
-
-      console.log('📤 GameDetailModal transaction prepared:', {
-        method: 'joinGame',
-        gameCode: game.code,
-        value: (isEthPayment ? buyInWei : 0n).toString(),
-        isEthPayment,
-        tokenAddress,
-        account: account.address
+        value: isEthPayment ? buyInWei : 0n
       });
 
-      // Helper function to process successful transaction
-      const processSuccessfulTransaction = async (result: any) => {
-        const paymentDisplay = isEthPayment 
-          ? formatEth(buyInWei.toString()) + ' ETH'
-          : formatTokenDisplay(buyInWei.toString(), tokenAddress);
+      const result = await sendTransaction({
+        transaction: tx,
+        account
+      });
 
-        console.log('✅ GameDetailModal transaction sent:', {
-          hash: result.transactionHash,
-          gameCode: game.code,
-          payment: paymentDisplay
-        });
+      console.log('⏳ Waiting for transaction confirmation...');
+      const receipt = await waitForReceipt(result);
 
-        await waitForReceipt({
-          client: contract.client,
-          chain: contract.chain,
-          transactionHash: result.transactionHash,
-        });
-
-        console.log('Successfully joined game!');
-        
-        // Show success toast
-        toast.success(`Successfully joined game ${game.code}!`, {
-          duration: 3000,
-          icon: '🎮',
-          id: 'join-game'
-        });
-        
-        await loadGameDetails();
-        onRefresh();
-      };
-
-      console.log('🚀 Sending join game transaction from detail modal...');
-      try {
-        const result = await sendTransaction({
-          transaction,
-          account,
-        });
-        
-        console.log('✅ Primary transaction succeeded!');
-        await processSuccessfulTransaction(result);
-        return;
-      } catch (primaryError: any) {
-        console.error('❌ Primary transaction failed, trying fallback with gas limit:', primaryError);
-        
-        // Fallback: try with explicit gas limit
-        const fallbackTransaction = prepareContractCall({
-          contract,
-          method: "function joinGame(string code) payable",
-          params: [game.code],
-          value: isEthPayment ? buyInWei : 0n,
-          gas: BigInt(200000),
-        });
-        
-        console.log('🔄 Attempting fallback with explicit gas limit...');
-        const result = await sendTransaction({
-          transaction: fallbackTransaction,
-          account,
-        });
-        
-        console.log('✅ Fallback transaction with gas limit succeeded!');
-        await processSuccessfulTransaction(result);
+      if (!receipt) {
+        throw new Error('Transaction receipt not received');
       }
+
+      const paymentDisplay = isEthPayment
+        ? formatEth(buyInWei.toString()) + ' ETH'
+        : formatTokenDisplay(buyInWei.toString(), tokenAddress);
+
+      console.log('✅ Successfully joined game!');
+      console.log(`   TX Hash: ${receipt.transactionHash}`);
+      console.log(`   Payment: ${paymentDisplay}`);
+
+      // Show success toast
+      toast.success(`Successfully joined game ${game.code}!`, {
+        duration: 3000,
+        icon: '🎮',
+        id: 'join-game'
+      });
+
+      await loadGameDetails();
+      onRefresh();
 
     } catch (err: any) {
       console.error('❌ GameDetailModal join failed:', err);
@@ -1197,57 +1157,63 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
 
   const handleReportWinners = async () => {
     if (!account || selectedWinners.length === 0) return;
-    
-    // Check if game is locked first (required in PU2)
-    if (!detailedGame.isLocked) {
+
+    // Check if game is locked first (required in OpenPoolsV36)
+    if (!detailedGame.locked) {
       setError('Game must be locked before reporting winners. Lock the game first.');
       return;
     }
 
     // Validate winner count matches prize distribution
-    const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 || 
+    const isWinnerTakeAll = !detailedGame.prizeSplits || detailedGame.prizeSplits.length === 0 ||
                             (detailedGame.prizeSplits.length === 1 && detailedGame.prizeSplits[0] === 1000);
     const requiredWinners = isWinnerTakeAll ? 1 : detailedGame.prizeSplits?.length || 1;
-    
+
     if (selectedWinners.length !== requiredWinners) {
       const prizeText = isWinnerTakeAll ? 'winner-take-all' : `${requiredWinners} prize${requiredWinners > 1 ? 's' : ''}`;
       setError(`Must select exactly ${requiredWinners} winner${requiredWinners > 1 ? 's' : ''} for this ${prizeText} game. Only winners with available prizes will receive winnings.`);
       return;
     }
-    
+
     try {
       setActionLoading(true);
       setError('');
 
       let winnersToSubmit = selectedWinners;
-      
-      console.log('Reporting winners in rank order:', winnersToSubmit);
-      
-      const transaction = prepareContractCall({
-        contract,
-        method: "function reportWinners(string code, address[] winners)",
-        params: [game.code, winnersToSubmit],
-      });
 
-      const result = await sendTransaction({
-        transaction,
+      console.log('🏆 Reporting winners gaslessly...');
+      console.log('   Winners in rank order:', winnersToSubmit);
+
+      toast.loading('Submitting winners (gasless)...', { id: 'report-winners' });
+
+      const result = await gaslessReportWinners(
         account,
+        game.code,
+        winnersToSubmit
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to report winners');
+      }
+
+      console.log('✅ Winners reported gaslessly!');
+      console.log(`   TX Hash: ${result.txHash}`);
+
+      toast.success('Winners reported! (gasless)', {
+        icon: '⚡',
+        duration: 3000,
+        id: 'report-winners'
       });
 
-      await waitForReceipt({
-        client: contract.client,
-        chain: contract.chain,
-        transactionHash: result.transactionHash,
-      });
-
-      console.log('Successfully reported winners!');
       setSelectedWinners([]);
       await loadGameDetails();
       onRefresh();
 
     } catch (err: any) {
       console.error('Failed to report winners:', err);
-      setError('Failed to report winners. Make sure game is locked and you selected valid players.');
+      const errorMsg = err.message || 'Failed to report winners. Make sure game is locked and you selected valid players.';
+      setError(errorMsg);
+      toast.error(errorMsg, { id: 'report-winners' });
     } finally {
       setActionLoading(false);
     }
@@ -1255,35 +1221,40 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
 
   const handleClaimWinnings = async () => {
     if (!account) return;
-    
+
     try {
       setActionLoading(true);
       setError('');
 
-      const transaction = prepareContractCall({
-        contract,
-        method: "function claimWinnings(string code)",
-        params: [game.code],
-      });
+      console.log('💰 Claiming winnings gaslessly...');
+      toast.loading('Claiming winnings (gasless)...', { id: 'claim-winnings' });
 
-      const result = await sendTransaction({
-        transaction,
+      const result = await gaslessClaimWinnings(
         account,
+        game.code
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to claim winnings');
+      }
+
+      console.log('✅ Winnings claimed gaslessly!');
+      console.log(`   TX Hash: ${result.txHash}`);
+
+      toast.success('Winnings claimed! (gasless, 1% UI fee)', {
+        icon: '⚡',
+        duration: 3000,
+        id: 'claim-winnings'
       });
 
-      await waitForReceipt({
-        client: contract.client,
-        chain: contract.chain,
-        transactionHash: result.transactionHash,
-      });
-
-      console.log('Successfully claimed winnings!');
       await loadGameDetails();
       onRefresh();
 
     } catch (err: any) {
       console.error('Failed to claim winnings:', err);
-      setError('Failed to claim winnings. You may not be a confirmed winner.');
+      const errorMsg = err.message || 'Failed to claim winnings. You may not be a confirmed winner.';
+      setError(errorMsg);
+      toast.error(errorMsg, { id: 'claim-winnings' });
     } finally {
       setActionLoading(false);
     }
@@ -1291,35 +1262,40 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
 
   const handleLockGame = async () => {
     if (!account) return;
-    
+
     try {
       setActionLoading(true);
       setError('');
 
-      const transaction = prepareContractCall({
-        contract,
-        method: "function lockGame(string code)",
-        params: [game.code],
+      console.log('🔒 Locking game gaslessly...');
+      toast.loading('Submitting lock transaction (gasless)...', { id: 'lock-game' });
+
+      const result = await gaslessLockGame(
+        account,  // Pass full account object for signing
+        game.code
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to lock game');
+      }
+
+      console.log('✅ Game locked gaslessly!');
+      console.log(`   TX Hash: ${result.txHash}`);
+
+      toast.success('Game locked! (gasless)', {
+        icon: '⚡',
+        duration: 3000,
+        id: 'lock-game'
       });
 
-      const result = await sendTransaction({
-        transaction,
-        account,
-      });
-
-      await waitForReceipt({
-        client: contract.client,
-        chain: contract.chain,
-        transactionHash: result.transactionHash,
-      });
-
-      console.log('Successfully locked game!');
       await loadGameDetails();
       onRefresh();
 
     } catch (err: any) {
       console.error('Failed to lock game:', err);
-      setError('Failed to lock game. Only the host can lock games.');
+      const errorMsg = err.message || 'Failed to lock game. Only the host can lock games.';
+      setError(errorMsg);
+      toast.error(errorMsg, { id: 'lock-game' });
     } finally {
       setActionLoading(false);
     }
@@ -1370,10 +1346,10 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
   const isPlayer = account && detailedGame.players?.some(p => p.toLowerCase() === account.address.toLowerCase());
   const isJudge = account && detailedGame.judges?.some(j => j.toLowerCase() === account.address.toLowerCase());
   const hasJudges = detailedGame.judges && detailedGame.judges.length > 0;
-  const canJoin = account && !isPlayer && !detailedGame.isLocked && (detailedGame.playerCount || 0) < (detailedGame.maxPlayers || 0);
-  
+  const canJoin = account && !isPlayer && !detailedGame.locked && (detailedGame.playerCount || 0) < (detailedGame.maxPlayers || 0);
+
   // Can vote if: game is locked but not completed, and user is eligible to vote
-  const canVote = detailedGame.isLocked && !detailedGame.isCompleted && account && (
+  const canVote = detailedGame.locked && !detailedGame.isCompleted && account && (
     hasJudges ? isJudge : isPlayer // Judge-decided: only judges can vote, Player-decided: players can vote
   );
 
@@ -1506,8 +1482,8 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
         </GameStatusIndicator>
 
         {/* Lock Status Indicator */}
-        <LockStatusIndicator $isLocked={detailedGame.isLocked || false}>
-          {detailedGame.isLocked ? (
+        <LockStatusIndicator $isLocked={detailedGame.locked || false}>
+          {detailedGame.locked ? (
             <><Lock size={16} />Game Locked - No new players can join</>
           ) : (
             <><Unlock size={16} />Game Open - Players can join</>
@@ -1662,9 +1638,9 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
             {/* Actions */}
             <ActionSection>
               <h3><Crown size={20} />Actions</h3>
-              
+
                 {/* Start Game Button (Host Only) */}
-                {isHost && !detailedGame.isLocked && (
+                {isHost && !detailedGame.locked && (
                   <BlockButton
                     color="pastelLavender"
                     onClick={() => {
@@ -1685,9 +1661,10 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
                     )}
                   </BlockButton>
                 )}
-                
+
+
                 {/* Set Prize Distribution Button (Host Only, unlocked games) */}
-                {isHost && !detailedGame.isLocked && (
+                {isHost && !detailedGame.locked && (
                   <BlockButton
                     color="pastelPeach"
                     onClick={() => setShowPrizeSplitsModal(true)}
@@ -1814,8 +1791,8 @@ const GameDetailModal: React.FC<GameDetailModalProps> = ({ game, onClose, onRefr
             {/* No actions available */}
             {!isHost && !isPlayer && !canJoin && (
               <StatusMessage variant="warning">
-                {detailedGame.isLocked 
-                  ? "Game is locked - no new players can join." 
+                {detailedGame.locked
+                  ? "Game is locked - no new players can join."
                   : "Game is full or you're not eligible to join."
                 }
               </StatusMessage>

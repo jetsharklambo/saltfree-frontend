@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useActiveAccount } from "thirdweb/react";
-import { prepareContractCall, sendTransaction, waitForReceipt } from 'thirdweb';
 import toast from 'react-hot-toast';
-import { X, Plus, Shield, Trash2 } from 'lucide-react';
-import { getGameContract, BASE_TOKENS, parseTokenAmount, isETH } from '../thirdweb';
+import { X, Plus, Shield, Trash2, Trophy } from 'lucide-react';
+import { BASE_TOKENS, parseTokenAmount, isETH } from '../thirdweb';
 import { resolveToWalletAddress, formatResolvedAddress, ResolvedAddress } from '../utils/addressResolver';
+import { gaslessCreateGame } from '../utils/gaslessHelper';
 import { 
   BlockModal, 
   BlockModalContent, 
@@ -220,6 +220,97 @@ const RemoveJudgeButton = styled.button`
   }
 `;
 
+const PrizeSplitsSection = styled.div`
+  background: ${blockTheme.pastelYellow};
+  border: 3px solid ${blockTheme.darkText};
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 4px 4px 0px ${blockTheme.shadowDark};
+`;
+
+const PrizeSplitsTitle = styled.h3`
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  color: ${blockTheme.darkText};
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const PrizeSplitRow = styled.div`
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  align-items: center;
+`;
+
+const PrizeSplitLabel = styled.div`
+  min-width: 80px;
+  font-weight: 600;
+  color: ${blockTheme.darkText};
+  font-size: 0.9rem;
+`;
+
+const PrizeSplitInput = styled(BlockInput)`
+  flex: 1;
+`;
+
+const PrizeSplitPercentage = styled.div`
+  min-width: 60px;
+  font-weight: 600;
+  color: ${blockTheme.darkText};
+  font-size: 0.9rem;
+  text-align: right;
+`;
+
+const PrizeTotalIndicator = styled.div<{ $isValid: boolean }>`
+  background: ${({ $isValid }) =>
+    $isValid ? blockTheme.pastelMint : blockTheme.pastelCoral};
+  border: 2px solid ${({ $isValid }) =>
+    $isValid ? blockTheme.success : blockTheme.error};
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: ${blockTheme.darkText};
+  font-weight: 600;
+  margin-top: 0.5rem;
+  box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
+  text-align: center;
+`;
+
+const PresetButtons = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+`;
+
+const PresetButton = styled.button`
+  padding: 0.5rem 1rem;
+  border: 2px solid ${blockTheme.darkText};
+  border-radius: 8px;
+  background: ${blockTheme.pastelBlue};
+  color: ${blockTheme.darkText};
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 2px 2px 0px ${blockTheme.shadowDark};
+
+  &:hover {
+    background: ${blockTheme.pastelMint};
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0px ${blockTheme.shadowDark};
+  }
+
+  &:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px ${blockTheme.shadowDark};
+  }
+`;
+
 const DecisionTypeSection = styled.div`
   background: ${blockTheme.pastelPeach};
   border: 3px solid ${blockTheme.darkText};
@@ -380,9 +471,12 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
   const [transactionHash, setTransactionHash] = useState<string>('');
   const [error, setError] = useState('');
   const [createdGameCode, setCreatedGameCode] = useState<string>('');
-  
+
   // Decision type state
   const [decisionType, setDecisionType] = useState<'player_vote' | 'judge'>('player_vote');
+
+  // Prize splits state (basis points: 10000 = 100%)
+  const [prizeSplits, setPrizeSplits] = useState<number[]>([10000]); // Default: winner takes all
   
   // Judges state
   const [judgeInput, setJudgeInput] = useState('');
@@ -391,11 +485,54 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
   const [judges, setJudges] = useState<ResolvedAddress[]>([]);
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
 
-  const contract = getGameContract();
-
   // Helper function to calculate majority needed for player voting
   const calculateMajority = (totalPlayers: number): number => {
     return Math.floor(totalPlayers / 2) + 1;
+  };
+
+  // Helper functions for prize splits
+  const getPrizeSplitTotal = (): number => {
+    return prizeSplits.reduce((sum, split) => sum + split, 0);
+  };
+
+  const isPrizeSplitValid = (): boolean => {
+    return getPrizeSplitTotal() === 10000;
+  };
+
+  const setPrizePreset = (preset: 'winner-takes-all' | '70-30' | '60-30-10' | '50-30-20') => {
+    switch (preset) {
+      case 'winner-takes-all':
+        setPrizeSplits([10000]);
+        break;
+      case '70-30':
+        setPrizeSplits([7000, 3000]);
+        break;
+      case '60-30-10':
+        setPrizeSplits([6000, 3000, 1000]);
+        break;
+      case '50-30-20':
+        setPrizeSplits([5000, 3000, 2000]);
+        break;
+    }
+  };
+
+  const handlePrizeSplitChange = (index: number, value: string) => {
+    const numValue = parseInt(value) || 0;
+    const newSplits = [...prizeSplits];
+    newSplits[index] = Math.max(0, Math.min(10000, numValue));
+    setPrizeSplits(newSplits);
+  };
+
+  const addPrizePosition = () => {
+    if (prizeSplits.length < 5) {
+      setPrizeSplits([...prizeSplits, 0]);
+    }
+  };
+
+  const removePrizePosition = (index: number) => {
+    if (prizeSplits.length > 1) {
+      setPrizeSplits(prizeSplits.filter((_, i) => i !== index));
+    }
   };
 
   // Token selection handlers
@@ -484,10 +621,29 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
     if (buyInAmount !== '0' && (isNaN(buyInValue) || buyInValue <= 0)) {
       throw new Error('Buy-in must be greater than 0 or set to 0 for free games');
     }
-    
+
     if (formData.maxPlayers < 2 || formData.maxPlayers > 50) {
       throw new Error('Max players must be between 2 and 50');
     }
+
+    if (!isPrizeSplitValid()) {
+      throw new Error('Prize splits must total exactly 100%');
+    }
+
+    if (prizeSplits.length > formData.maxPlayers) {
+      throw new Error(`Cannot have more prize positions (${prizeSplits.length}) than max players (${formData.maxPlayers})`);
+    }
+  };
+
+  // Generate a random game code (3-10 alphanumeric characters)
+  const generateGameCode = (): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const length = 6; // Use 6 characters for game codes
+    let code = '';
+    for (let i = 0; i < length; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -504,102 +660,71 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
 
       validateInputs();
 
-      console.log('Creating game with:', {
-        buyIn: formData.buyIn,
-        maxPlayers: formData.maxPlayers,
-        judges: judges.map(j => j.address),
-        account: account.address
-      });
-
       // Parse buy-in amount based on selected token
       const effectiveTokenAddress = getEffectiveTokenAddress();
       const selectedTokenInfo = Object.values(BASE_TOKENS).find(token => token.address === effectiveTokenAddress);
       const tokenDecimals = selectedTokenInfo?.decimals || 18;
       const buyInTokenAmount = parseFloat(buyInAmount) === 0 ? BigInt(0) : parseTokenAmount(buyInAmount, tokenDecimals);
-      // Use judges only when decision type is 'judge', otherwise empty array for player voting
-      const judgeAddresses = decisionType === 'judge' ? judges.map(judge => judge.address) : [];
-      console.log('Buy-in amount:', buyInTokenAmount.toString());
-      console.log('Decision type:', decisionType);
-      console.log('Judge addresses:', judgeAddresses);
 
-      try {
-        console.log('Creating game...');
-        
-        // Use multi-token function for new contract, fallback to legacy for ETH-only
-        const useMultiToken = !isETH(effectiveTokenAddress) || buyInTokenAmount === BigInt(0);
-        
-        const transaction = useMultiToken ? 
-          prepareContractCall({
-            contract,
-            method: "function startGameWithToken(uint256 buyInAmount, address buyInToken, uint256 maxPlayers, address[] judgeList) returns (string code)",
-            params: [buyInTokenAmount, effectiveTokenAddress, BigInt(formData.maxPlayers), judgeAddresses],
-          }) :
-          prepareContractCall({
-            contract,
-            method: "function startGame(uint256 buyIn, uint256 maxPlayers, address[] judgeList) returns (string code)",
-            params: [buyInTokenAmount, BigInt(formData.maxPlayers), judgeAddresses],
-          });
-        
-        const { transactionHash } = await sendTransaction({
-          account,
-          transaction,
-        });
+      console.log('Creating game with:', {
+        buyIn: buyInAmount,
+        buyInTokenAmount: buyInTokenAmount.toString(),
+        token: effectiveTokenAddress,
+        maxPlayers: formData.maxPlayers,
+        account: account.address
+      });
 
-        console.log('Game transaction submitted! Hash:', transactionHash);
-        
-        // Close modal immediately and let background monitoring handle the rest
-        onSuccess({ 
-          gameCode: 'PENDING', // Special code to indicate pending status
-          buyIn: buyInAmount, 
-          maxPlayers: formData.maxPlayers,
-          transactionHash: transactionHash,
-          blockNumber: 0 // Will be set when transaction confirms
-        });
-        
-        // Exit early - background monitoring will handle completion
-        return;
+      // Call gasless create function (user will sign, backend will pay gas)
+      const result = await gaslessCreateGame(
+        account, // Pass account object for signing
+        buyInTokenAmount.toString(),
+        effectiveTokenAddress,
+        formData.maxPlayers,
+        [], // No judges for now
+        prizeSplits
+      );
 
-        // This code has been moved to background monitoring
-        // The modal closes immediately after transaction submission
-      } catch (apiError: any) {
-        console.error('Transaction error:', apiError);
-        
-        if (apiError.message?.includes('receipt')) {
-          throw new Error('Transaction was submitted but confirmation failed. Please check your transaction history.');
-        } else if (apiError.message?.includes('timeout')) {
-          throw new Error('Transaction is taking longer than expected. Please check your transaction history.');
-        } else {
-          throw new Error('Smart contract interaction failed. Please try again.');
-        }
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create game');
       }
-      
+
+      console.log('Game created successfully via gasless relay!');
+      console.log('Game Code:', result.gameCode);
+      console.log('TX Hash:', result.txHash);
+
+      toast.success(`Game ${result.gameCode} created! ⚡ Gasless transaction`, {
+        duration: 3000,
+        icon: '🎮'
+      });
+
+      // Call onSuccess with game details
+      onSuccess({
+        gameCode: result.gameCode!,
+        buyIn: buyInAmount,
+        maxPlayers: formData.maxPlayers,
+        transactionHash: result.txHash,
+        blockNumber: result.blockNumber
+      });
+
+      onClose();
+
     } catch (err: any) {
       console.error('Failed to create game:', err);
-      
+
       let errorMessage = 'Failed to create game';
-      
-      if (err.message?.includes('execution reverted')) {
-        // Extract the revert reason if available
-        const revertMatch = err.message.match(/execution reverted:?\s*([^"\n]+)/);
-        if (revertMatch && revertMatch[1]) {
-          errorMessage = `Contract error: ${revertMatch[1].trim()}`;
-        } else {
-          errorMessage = 'Contract rejected the transaction (invalid buy-in amount or max players)';
-        }
-      } else if (err.message?.includes('insufficient funds')) {
-        errorMessage = 'Insufficient ETH for gas fees';
+
+      if (err.message?.includes('Signature cancelled')) {
+        errorMessage = 'Signature cancelled by user';
       } else if (err.message?.includes('user rejected')) {
         errorMessage = 'Transaction cancelled by user';
-      } else if (err.message?.includes('replacement fee too low')) {
-        errorMessage = 'Transaction fee too low, try increasing gas price';
+      } else if (err.message?.includes('Relay failed')) {
+        errorMessage = 'Gasless relay failed - backend may be offline';
       } else if (err.message) {
-        // Use the original error message from MetaMask/contract
         errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
-      
-      // Also show toast notification for immediate feedback
+
       toast.error(errorMessage, {
         duration: 5000,
         style: {
@@ -725,6 +850,69 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({ onClose, onSuccess })
               ))}
             </BlockSelect>
           </FormGroup>
+
+          <PrizeSplitsSection>
+            <PrizeSplitsTitle>
+              <Trophy size={16} />
+              Prize Distribution
+            </PrizeSplitsTitle>
+
+            <InfoBox variant="info" style={{ marginBottom: '1rem' }}>
+              Configure how prizes are distributed among winners. Total must equal 100%. Values are in basis points (100 = 1%).
+            </InfoBox>
+
+            <PresetButtons>
+              <PresetButton type="button" onClick={() => setPrizePreset('winner-takes-all')}>
+                Winner Takes All
+              </PresetButton>
+              <PresetButton type="button" onClick={() => setPrizePreset('70-30')}>
+                70% / 30%
+              </PresetButton>
+              <PresetButton type="button" onClick={() => setPrizePreset('60-30-10')}>
+                60% / 30% / 10%
+              </PresetButton>
+              <PresetButton type="button" onClick={() => setPrizePreset('50-30-20')}>
+                50% / 30% / 20%
+              </PresetButton>
+            </PresetButtons>
+
+            {prizeSplits.map((split, index) => (
+              <PrizeSplitRow key={index}>
+                <PrizeSplitLabel>{index === 0 ? '1st' : index === 1 ? '2nd' : index === 2 ? '3rd' : `${index + 1}th`} Place:</PrizeSplitLabel>
+                <PrizeSplitInput
+                  type="number"
+                  min="0"
+                  max="10000"
+                  value={split}
+                  onChange={(e) => handlePrizeSplitChange(index, e.target.value)}
+                  placeholder="Enter basis points (100 = 1%)"
+                />
+                <PrizeSplitPercentage>{(split / 100).toFixed(1)}%</PrizeSplitPercentage>
+                {prizeSplits.length > 1 && (
+                  <RemoveJudgeButton type="button" onClick={() => removePrizePosition(index)}>
+                    <Trash2 size={14} />
+                  </RemoveJudgeButton>
+                )}
+              </PrizeSplitRow>
+            ))}
+
+            {prizeSplits.length < 5 && (
+              <BlockButton
+                type="button"
+                variant="secondary"
+                onClick={addPrizePosition}
+                style={{ marginTop: '0.5rem' }}
+              >
+                <Plus size={16} />
+                Add Prize Position
+              </BlockButton>
+            )}
+
+            <PrizeTotalIndicator $isValid={isPrizeSplitValid()}>
+              {isPrizeSplitValid() ? '✅' : '⚠️'} Total: {(getPrizeSplitTotal() / 100).toFixed(1)}%
+              {isPrizeSplitValid() ? ' (Valid)' : ` (Must be 100%, currently ${(getPrizeSplitTotal() / 100).toFixed(1)}%)`}
+            </PrizeTotalIndicator>
+          </PrizeSplitsSection>
 
           <DecisionTypeSection>
             <DecisionTypeTitle>Winner Decision Method</DecisionTypeTitle>

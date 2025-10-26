@@ -9,6 +9,7 @@ import { getGameContract, formatEth, formatPrizeSplit, formatTokenDisplay, ensur
 import { getDisplayNameByAddressSync, preloadDisplayNames, getDisplayNamesByAddresses } from '../utils/userUtils';
 import { validation } from '../utils/envUtils';
 import { logger, logGameAction } from '../utils/logger';
+import { gaslessLockGame, gaslessReportWinners, gaslessClaimWinnings } from '../utils/gaslessHelper';
 import { 
   Block,
   BlockButton, 
@@ -833,41 +834,36 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
   };
 
   const handleClaimWinnings = async () => {
-    if (!game || !account?.address) return;
-    
+    if (!game || !account) return;
+
     setActionLoading(true);
     try {
-      console.log('💰 Claiming winnings for game:', game.gameCode);
-      
-      const contract = getGameContract();
-      const transaction = prepareContractCall({
-        contract,
-        method: "function claimWinnings(string code)",
-        params: [game.gameCode]
-      });
+      console.log('💰 Claiming winnings gaslessly:', game.gameCode);
 
-      const receipt = await sendTransaction({
-        transaction,
+      const result = await gaslessClaimWinnings(
         account,
+        game.gameCode
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to claim winnings');
+      }
+
+      console.log('✅ Winnings claimed gaslessly!');
+      console.log(`   TX Hash: ${result.txHash}`);
+
+      toast.success('Winnings claimed! (gasless, 1% UI fee)', {
+        icon: '⚡',
+        duration: 3000
       });
 
-      console.log('✅ Claim winnings transaction sent:', receipt);
-      
-      // Wait for confirmation
-      const confirmedReceipt = await waitForReceipt({
-        client: contract.client,
-        chain: contract.chain,
-        transactionHash: receipt.transactionHash
-      });
-
-      console.log('✅ Claim winnings confirmed:', confirmedReceipt);
-      
       // Refresh game data to show updated state
       window.location.reload();
-      
+
     } catch (error: any) {
       console.error('❌ Failed to claim winnings:', error);
       setError(error.message || 'Failed to claim winnings');
+      toast.error(error.message || 'Failed to claim winnings');
     } finally {
       setActionLoading(false);
     }
@@ -914,104 +910,94 @@ export default function GameDetailPage({ autoJoin = false }: GameDetailPageProps
 
   const handleReportWinners = async () => {
     if (!account || selectedWinners.length === 0 || !game) return;
-    
+
     try {
       setActionLoading(true);
       setError(null);
-      
-      console.log('🏆 Reporting winners in rank order:', selectedWinners, 'for game:', game.gameCode);
-      
+
+      console.log('🏆 Reporting winners gaslessly (ranked):', selectedWinners);
+
       // Validate winner count matches prize distribution
-      const isWinnerTakeAll = !game.prizeSplits || game.prizeSplits.length === 0 || 
+      const isWinnerTakeAll = !game.prizeSplits || game.prizeSplits.length === 0 ||
                               (game.prizeSplits.length === 1 && game.prizeSplits[0] === 1000);
       const requiredWinners = isWinnerTakeAll ? 1 : game.prizeSplits?.length || 1;
-      
+
       if (selectedWinners.length !== requiredWinners) {
         const prizeText = isWinnerTakeAll ? 'winner-take-all' : `${requiredWinners} prize${requiredWinners > 1 ? 's' : ''}`;
-        toast.error(`Must select exactly ${requiredWinners} winner${requiredWinners > 1 ? 's' : ''} for this ${prizeText} game. Only winners with available prizes will receive winnings.`);
+        toast.error(`Must select exactly ${requiredWinners} winner${requiredWinners > 1 ? 's' : ''} for this ${prizeText} game.`);
         setActionLoading(false);
         return;
       }
-      
-      // For winner-take-all games (no prize splits), ensure we only submit one winner
+
+      // For winner-take-all games, ensure only one winner
       let winnersToSubmit = selectedWinners;
-                              
       if (isWinnerTakeAll && selectedWinners.length > 0) {
-        winnersToSubmit = [selectedWinners[0]]; // Only take the first winner for winner-take-all
-        console.log('🏆 Winner-take-all game: submitting only first winner:', winnersToSubmit);
+        winnersToSubmit = [selectedWinners[0]];
+        console.log('🏆 Winner-take-all: submitting first winner only:', winnersToSubmit);
       }
-      
-      const contract = getGameContract();
-      const transaction = prepareContractCall({
-        contract,
-        method: "function reportWinners(string code, address[] winners)",
-        params: [game.gameCode, winnersToSubmit]
-      });
 
-      const receipt = await sendTransaction({
-        transaction,
+      const result = await gaslessReportWinners(
         account,
+        game.gameCode,
+        winnersToSubmit  // RANK ORDER PRESERVED
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to report winners');
+      }
+
+      console.log('✅ Winners reported gaslessly!');
+      console.log(`   TX Hash: ${result.txHash}`);
+
+      toast.success('Winners reported! (gasless)', {
+        icon: '⚡',
+        duration: 3000
       });
 
-      console.log('✅ Report winners transaction sent:', receipt);
-      
-      // Wait for confirmation
-      const confirmedReceipt = await waitForReceipt({
-        client: contract.client,
-        chain: contract.chain,
-        transactionHash: receipt.transactionHash
-      });
-
-      console.log('✅ Report winners confirmed:', confirmedReceipt);
-      
-      // Clear selected winners and refresh game data
+      // Clear selected winners and refresh
       setSelectedWinners([]);
       window.location.reload();
-      
+
     } catch (e: any) {
       console.error('❌ Failed to report winners:', e);
       setError(e.message || 'Failed to report winners');
+      toast.error(e.message || 'Failed to report winners');
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleLockGame = async () => {
-    if (!game || !account?.address) return;
-    
+    if (!game || !account) return;
+
     setActionLoading(true);
     try {
-      console.log('🔒 Locking game:', game.gameCode);
-      
-      const contract = getGameContract();
-      const transaction = prepareContractCall({
-        contract,
-        method: "function lockGame(string code)",
-        params: [game.gameCode]
-      });
+      console.log('🔒 Locking game gaslessly:', game.gameCode);
 
-      const receipt = await sendTransaction({
-        transaction,
+      const result = await gaslessLockGame(
         account,
+        game.gameCode
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to lock game');
+      }
+
+      console.log('✅ Game locked gaslessly!');
+      console.log(`   TX Hash: ${result.txHash}`);
+
+      toast.success('Game locked! (gasless)', {
+        icon: '⚡',
+        duration: 3000
       });
 
-      console.log('✅ Lock game transaction sent:', receipt);
-      
-      // Wait for confirmation
-      const confirmedReceipt = await waitForReceipt({
-        client: contract.client,
-        chain: contract.chain,
-        transactionHash: receipt.transactionHash
-      });
-
-      console.log('✅ Lock game confirmed:', confirmedReceipt);
-      
       // Refresh game data to show updated state
       window.location.reload();
-      
+
     } catch (error: any) {
       console.error('❌ Failed to lock game:', error);
       setError(error.message || 'Failed to lock game');
+      toast.error(error.message || 'Failed to lock game');
     } finally {
       setActionLoading(false);
     }

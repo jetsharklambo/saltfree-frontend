@@ -42,3 +42,46 @@ coverage/
 tmp/
 temp/
 .vercel
+
+# Smart contracts and blockchain artifacts (frontend only - contracts live on VPS)
+contracts/
+contracts-erc2771/
+artifacts/
+cache/
+deployments/
+deployments-erc2771/
+hardhat.config.js
+*.sol
+
+# Backend (runs separately on VPS)
+paymaster-backend/
+
+# Test files
+test/
+test-erc2771/
+test-*.js
+test-*.html
+*.test.js
+*.spec.js
+
+# Scripts with potential secrets
+scripts/
+scripts-erc2771/
+vps-setup-guide.sh
+check-*.sh
+
+# Internal documentation
+DEPLOYMENT*.md
+GASLESS*.md
+TEST*.md
+VPS*.md
+WALLET*.md
+PAYMASTER*.md
+PROMPT*.md
+ERC2771*.md
+*-GUIDE.md
+*-PLAN.md
+*-STATUS.md
+*-COMPLETE.md
+*-SUMMARY.md
+CONTRACT*.md

@@ -1,5 +1,5 @@
 import { createThirdwebClient, getContract, prepareContractCall, sendTransaction, waitForReceipt, readContract } from "thirdweb";
-import { base } from "thirdweb/chains";
+import { base, ethereum } from "thirdweb/chains";
 import { getRequiredEnvVar } from "./utils/envUtils";
 
 // Note: Don't re-export Thirdweb functions here as it breaks dynamic imports
@@ -13,7 +13,17 @@ export const client = createThirdwebClient({
   clientId: getRequiredEnvVar('REACT_APP_THIRDWEB_CLIENT_ID')
 });
 
+// Available chains
+export const supportedChains = {
+  base,
+  ethereum
+};
+
+// Default chain (Base)
 export const chain = base;
+
+// Export both chains for network switching
+export { base, ethereum };
 
 // Async getter functions for components (safer for component-level usage)
 export const getClient = async () => {
@@ -24,44 +34,40 @@ export const getChain = async () => {
   return chain;
 };
 
-// Your deployed smart contract address - PU3.0 Contract on Base Mainnet
-export const CONTRACT_ADDRESS = "0x6a242970f55e050CB54DA489751d562083abD4B7";
+// OpenPoolsV36 with ERC2771 Gasless Support - Base Mainnet
+export const CONTRACT_ADDRESS = "0xEE39bFE97e165fd15C2B0c75D96ddFfa816DDD11";
 
-// Contract ABI - PU3.0 Contract with multi-token support
+// MinimalForwarder for ERC2771 meta-transactions
+export const FORWARDER_ADDRESS = "0x4FFAE8a0818FFd17284674004ABf1e4340B89691";
+
+// Relay API URL for gasless transactions
+export const RELAY_API_URL = process.env.REACT_APP_RELAY_API_URL || "http://localhost:3001/api/gasless";
+
+// Contract ABI - OpenPoolsV36 with ERC2771 support
 export const CONTRACT_ABI = [
-  // View functions - Updated for multi-token contract
-  "function getGameInfo(string code) view returns (address host, address token, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool isLocked, uint256[] splits, address[] judges)",
-  "function getPlayers(string code) view returns (address[] players)",
-  "function getInGameJudges(string code) view returns (address[] judges)",
-  "function getConfirmedWinners(string code) view returns (address[] winners)",
-  "function codeIsAvailable(string code) view returns (bool)",
-  "function isWinnerConfirmed(string code, address winner) view returns (bool)",
-  "function isTokenAllowed(address token) view returns (bool)",
-  
-  // Write functions - Multi-token support
-  "function startGameWithToken(uint256 buyInAmount, address buyInToken, uint256 maxPlayers, address[] judgeList) returns (string code)",
-  "function startGame(uint256 buyIn, uint256 maxPlayers, address[] judgeList) returns (string code)", // Legacy ETH-only
+  // Write functions
+  "function createGame(uint256 buyIn, address token, uint256 maxPlayers, address[] judges, uint256[] splits) returns (string)",
   "function joinGame(string code) payable",
-  "function lockGame(string code)",
-  "function setPrizeSplits(string code, uint256[] splits)",
   "function reportWinners(string code, address[] winners)",
   "function claimWinnings(string code)",
-  "function addPot(string code, uint256 amount) payable",
-  "function rmGame(string code, address participant)",
-  "function setTokenWhitelist(address token, bool allowed)",
-  
-  // Events - Updated for multi-token contract
-  "event GameStarted(string code, address indexed host, address token, uint256 buyIn, uint256 maxPlayers, address[] judges)",
-  "event JudgeSet(string code, address indexed judge)",
-  "event PlayerJoined(string code, address indexed player, address token, uint256 amount)",
-  "event PlayerRemoved(string code, address indexed participant)",
-  "event GameLocked(string code)",
-  "event PrizeSplitsSet(string code, uint256[] splits)",
-  "event PotAdded(string code, address indexed sender, address token, uint256 amount)",
-  "event WinnersReported(string code, address indexed reporter, address[] winners)",
-  "event WinnerSetConfirmed(string code, address[] winners)",
-  "event WinningsClaimed(string code, address indexed winner, address token, uint256 amount)",
-  "event TokenWhitelisted(address indexed token, bool allowed)",
+  "function lockGame(string code)",
+
+  // View functions
+  "function getGameInfo(string code) view returns (address host, address token, uint256 buyIn, uint256 maxPlayers, uint256 playerCount, bool locked, uint256[] splits, address[] judges)",
+  "function getPlayers(string code) view returns (address[])",
+  "function getConfirmedWinners(string code) view returns (address[])",
+  "function isWinnerConfirmed(string code, address winner) view returns (bool)",
+  "function codeIsAvailable(string code) view returns (bool)",
+  "function getTotalPrize(string code) view returns (uint256)",
+  "function isTrustedForwarder(address forwarder) view returns (bool)",
+
+  // Events
+  "event GameStarted(string indexed code, address indexed host, address token, uint256 buyIn, uint256 maxPlayers)",
+  "event PlayerJoined(string indexed code, address indexed player, uint256 playerCount)",
+  "event GameLocked(string indexed code)",
+  "event WinnersReported(string indexed code, address[] winners)",
+  "event WinningsClaimed(string indexed code, address indexed winner, address token, uint256 amount)",
+  "event WinningsClaimedViaUI(string indexed code, address indexed winner, address token, uint256 userPayout, uint256 uiFee, uint256 feeRate)"
 ] as const;
 
 // Helper functions
@@ -454,6 +460,19 @@ export const gameContract = getContract({
   address: CONTRACT_ADDRESS,
   abi: CONTRACT_ABI,
 });
+
+// MinimalForwarder contract for ERC2771 gasless transactions
+export const getForwarderContract = () => {
+  return getContract({
+    client,
+    chain,
+    address: FORWARDER_ADDRESS,
+    abi: [
+      "function execute((address from,address to,uint256 value,uint256 gas,uint256 nonce,bytes data) request, bytes signature) payable returns (bool, bytes)",
+      "function getNonce(address from) view returns (uint256)"
+    ]
+  });
+};
 
 // ERC20 Token Approval Helpers
 export const getERC20Contract = (tokenAddress: string) => {
