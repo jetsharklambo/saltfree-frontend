@@ -309,62 +309,57 @@ export const decodeGameStartedEvent = (hexData: string): { code: string; token: 
  * 
  * The data field contains: code, token, amount (player is indexed and in topics)
  */
-export const decodePlayerJoinedEvent = (hexData: string): string | null => {
+/**
+ * Decode bytes32 indexed game code from event topics
+ * For events where game code is indexed (in topics, not data)
+ */
+export const decodeGameCodeFromTopic = (topicHash: string): string | null => {
   try {
-    const data = hexData.startsWith('0x') ? hexData.slice(2) : hexData;
-    console.log('🔍 Decoding PlayerJoined event data:', hexData);
-    
-    if (data.length < 192) { // Updated minimum length for code, token, amount
-      console.log('❌ Data too short for PlayerJoined event');
-      return null;
-    }
-    
-    // PlayerJoined structure: string code, address token, uint256 amount
-    // First 32 bytes: offset to string code
-    // Second 32 bytes: token address (padded)
-    // Third 32 bytes: amount
-    // Then string data starts
-    
-    const chunk0 = data.slice(0, 64);    // Offset to string code
-    const chunk1 = data.slice(64, 128);  // token address
-    const chunk2 = data.slice(128, 192); // amount
-    
-    // Decode string offset and find the actual string
-    const stringOffset = parseInt(chunk0, 16) * 2;
-    console.log('📦 String offset in hex chars:', stringOffset);
-    
-    if (stringOffset >= data.length) {
-      console.log('❌ String offset beyond data length');
-      return null;
-    }
-    
-    // Read string length at the offset
-    const stringLengthHex = data.slice(stringOffset, stringOffset + 64);
-    const stringLength = parseInt(stringLengthHex, 16);
-    console.log('📦 String length:', stringLength);
-    
-    if (stringLength === 0 || stringLength > 50) {
-      console.log('❌ Invalid string length:', stringLength);
-      return null;
-    }
-    
-    // Extract the string data
-    const stringDataStart = stringOffset + 64;
-    const stringHex = data.slice(stringDataStart, stringDataStart + (stringLength * 2));
-    
+    if (!topicHash || topicHash.length < 10) return null;
+
+    // Remove 0x prefix
+    const hash = topicHash.startsWith('0x') ? topicHash.slice(2) : topicHash;
+
+    // Convert hex to ASCII, stopping at null byte
     let code = '';
-    for (let i = 0; i < stringHex.length; i += 2) {
-      const hex = stringHex.substr(i, 2);
-      const charCode = parseInt(hex, 16);
-      if (charCode === 0) break;
-      code += String.fromCharCode(charCode);
+    for (let i = 0; i < hash.length && code.length < 20; i += 2) {
+      const charCode = parseInt(hash.substr(i, 2), 16);
+      if (charCode === 0) break; // Stop at null terminator
+      if (charCode >= 32 && charCode <= 126) { // Printable ASCII only
+        code += String.fromCharCode(charCode);
+      }
     }
-    
-    console.log('✅ Decoded PlayerJoined event code:', code);
-    return code && code.length >= 3 ? code : null;
-    
+
+    // Validate game code format (3-10 alphanumeric chars with optional dash)
+    if (code.length >= 3 && code.length <= 10 && /^[A-Z0-9-]+$/i.test(code)) {
+      return code;
+    }
+
+    return null;
   } catch (error) {
-    console.warn('❌ Failed to decode PlayerJoined event:', hexData, error);
+    return null;
+  }
+};
+
+export const decodePlayerJoinedEvent = (topics: string[]): string | null => {
+  try {
+    // PlayerJoined(bytes32 indexed code, address indexed player, uint256 amount)
+    // topics[0] = event signature
+    // topics[1] = game code (bytes32)
+    // topics[2] = player address
+    // data = amount
+
+    if (!topics || topics.length < 2) {
+      console.log('❌ PlayerJoined event missing topics');
+      return null;
+    }
+
+    const gameCode = decodeGameCodeFromTopic(topics[1]);
+    console.log('✅ Decoded PlayerJoined game code from topics[1]:', gameCode);
+    return gameCode;
+
+  } catch (error) {
+    console.warn('❌ Failed to decode PlayerJoined event:', error);
     return null;
   }
 };

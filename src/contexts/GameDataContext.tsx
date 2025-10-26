@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { getGameContract, decodeStringFromHex, decodeGameStartedEvent, decodePlayerJoinedEvent, decodeGameLockedEvent, decodeWinnersReportedEvent, CONTRACT_ADDRESS } from '../thirdweb';
+import { getGameContract, decodeStringFromHex, decodeGameStartedEvent, decodePlayerJoinedEvent, decodeGameCodeFromTopic, decodeGameLockedEvent, decodeWinnersReportedEvent, CONTRACT_ADDRESS } from '../thirdweb';
 import { logBuyInInfo } from '../utils/buyInUtils';
 import { databaseService } from '../services/databaseService';
 import { useUser } from './UserContext';
@@ -10,45 +10,46 @@ import { pollForRecentGames } from '../utils/gamePolling';
 
 import { readContract, getContractEvents, getRpcClient, eth_blockNumber, prepareEvent, eth_getLogs } from 'thirdweb';
 
-// Prepared events for efficient querying - Updated for UP2.1 contract
+// Prepared events for deployed contract 0xEE39bFE97e165fd15C2B0c75D96ddFfa816DDD11
+// NOTE: GameCode is INDEXED (bytes32) in topics, not a string parameter
 const gameStartedEvent = prepareEvent({
   signature: "event GameStarted(string code, address indexed host, address token, uint256 buyIn, uint256 maxPlayers, address[] judges)"
 });
 
 const judgeSetEvent = prepareEvent({
-  signature: "event JudgeSet(string code, address indexed judge)"
+  signature: "event JudgeSet(bytes32 indexed code, address indexed judge)"
 });
 
 const playerJoinedEvent = prepareEvent({
-  signature: "event PlayerJoined(string code, address indexed player, address token, uint256 amount)"
+  signature: "event PlayerJoined(bytes32 indexed code, address indexed player, uint256 amount)"
 });
 
 const playerRemovedEvent = prepareEvent({
-  signature: "event PlayerRemoved(string code, address indexed participant)"
+  signature: "event PlayerRemoved(bytes32 indexed code, address indexed participant)"
 });
 
 const gameLockedEvent = prepareEvent({
-  signature: "event GameLocked(string code)"
+  signature: "event GameLocked(bytes32 indexed code)"
 });
 
 const prizeSplitsSetEvent = prepareEvent({
-  signature: "event PrizeSplitsSet(string code, uint256[] splits)"
+  signature: "event PrizeSplitsSet(bytes32 indexed code, uint256[] splits)"
 });
 
 const potAddedEvent = prepareEvent({
-  signature: "event PotAdded(string code, address indexed sender, uint256 amount)"
+  signature: "event PotIncreased(bytes32 indexed code, address indexed contributor, uint256 amount)"
 });
 
 const winnersReportedEvent = prepareEvent({
-  signature: "event WinnersReported(string code, address indexed reporter, address[] winners)"
+  signature: "event WinnersReported(bytes32 indexed code, address indexed reporter, address[] winners)"
 });
 
 const winnerSetConfirmedEvent = prepareEvent({
-  signature: "event WinnerSetConfirmed(string code, address[] winners)"
+  signature: "event WinnerSetConfirmed(bytes32 indexed code, address[] winners)"
 });
 
 const winningsClaimedEvent = prepareEvent({
-  signature: "event WinningsClaimed(string code, address indexed winner, uint256 amount)"
+  signature: "event WinningsClaimed(bytes32 indexed code, address indexed winner, address token, uint256 amount)"
 });
 
 // Constants for blockchain searching
@@ -302,12 +303,15 @@ function getEventName(signature?: string): string | null {
   if (!signature) return null;
   
   const eventMap: Record<string, string> = {
-    '0xf38f031a0916124649a52ef62ca68c773c22f2386d78bb4aed755a298c7b18d3': 'GameStarted', // Calculated from GameStarted(string,address,address,uint256,uint256,address[])
-    '0x651823ece9ef08ab9d5d4e19bebb603e316362fb41f7ee2e03e7f1684c1852b4': 'PlayerJoined', // Calculated from PlayerJoined(string,address,address,uint256)
-    '0xf8ff7b65f89533529cfb22afeca74e7a0a22760b35258fa00cf0388cd2c13bb3': 'WinnersReported',
+    // All signatures verified from deployed contract 0xEE39bFE97e165fd15C2B0c75D96ddFfa816DDD11
+    '0x20a19639733fdd02c1279a77aa77a1d0b8c360163bc4b6f2c72c1d1dcd47ae8e': 'GameStarted',
+    '0x677e9fb27b04f2cf5b63c58aacebac069b21b080b14b9184945ba8185f640747': 'PlayerJoined',
     '0xe3574ea7f4f8590b62692642ffda0055801ec44f42c76bcaa9c45453da24319f': 'GameLocked',
-    '0x7175967b5ddee4d7986318165167133a8c193aa59b05f411ec131d4f124a3f3d': 'WinningsClaimed',
-    '0x8a3f510bd40a2bff6e6502777e1359083e910aef0aa28a765f4fa8d84871ba67': 'PrizeSplitsSet'
+    '0xf52362634e34f5b1490607672dcb7219533f764a2974c04683172f19da9bf19d': 'WinnersReported',
+    '0x416944ecc005c7f1d6aa7aff4d0ab1d83d4a6ec66a92cf51b44b7a9170d54c63': 'WinnerSetConfirmed',
+    '0x3ee093fc8573d26f751985673e011ce7062f60ec12ac816784caa688d1b65fdc': 'WinningsClaimed',
+    '0x97caf7f2c502e6304676669c62071c54129ee9878145b4cda4b9c69789488409': 'PotIncreased',
+    '0xb419b2a1f4a77fef0217ee6d70b6979d58ea89fac3ef69218feb2492da8b7bd1': 'UIProviderRegistered'
   };
   
   return eventMap[signature.toLowerCase()] || null;
@@ -752,31 +756,38 @@ export const GameDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const eventSignature = event.topics?.[0];
             const eventName = getEventName(eventSignature);
             
-            // Use appropriate decoder based on event type
-            if (event.data && event.data.length > 2) {
-              switch (eventSignature) {
-                case '0xf38f031a0916124649a52ef62ca68c773c22f2386d78bb4aed755a298c7b18d3': // GameStarted
+            // Use appropriate decoder based on event type (UPDATED signatures from deployed contract)
+            switch (eventSignature) {
+              case '0x20a19639733fdd02c1279a77aa77a1d0b8c360163bc4b6f2c72c1d1dcd47ae8e': // GameStarted (FIXED)
+                if (event.data && event.data.length > 2) {
                   const gameStartedData = decodeGameStartedEvent(event.data);
                   gameCode = gameStartedData?.code || null;
-                  break;
-                case '0x651823ece9ef08ab9d5d4e19bebb603e316362fb41f7ee2e03e7f1684c1852b4': // PlayerJoined
-                  gameCode = decodePlayerJoinedEvent(event.data);
-                  break;
-                case '0xe3574ea7f4f8590b62692642ffda0055801ec44f42c76bcaa9c45453da24319f': // GameLocked
-                  gameCode = decodeGameLockedEvent(event.data);
-                  break;
-                case '0xf8ff7b65f89533529cfb22afeca74e7a0a22760b35258fa00cf0388cd2c13bb3': // WinnersReported
-                  gameCode = decodeWinnersReportedEvent(event.data);
-                  break;
-                case '0x7175967b5ddee4d7986318165167133a8c193aa59b05f411ec131d4f124a3f3d': // WinningsClaimed
-                case '0x8a3f510bd40a2bff6e6502777e1359083e910aef0aa28a765f4fa8d84871ba67': // PrizeSplitsSet
-                  gameCode = decodeStringFromHex(event.data); // Fallback for simple events
-                  break;
-                default:
-                  console.log(`🔍 Unknown event signature: ${eventSignature}, using fallback decoder`);
+                }
+                break;
+              case '0x677e9fb27b04f2cf5b63c58aacebac069b21b080b14b9184945ba8185f640747': // PlayerJoined (FIXED)
+                // Game code is in topics[1], not data
+                gameCode = decodePlayerJoinedEvent(event.topics);
+                break;
+              case '0xe3574ea7f4f8590b62692642ffda0055801ec44f42c76bcaa9c45453da24319f': // GameLocked (matches)
+                // Game code is in topics[1], not data
+                gameCode = event.topics && event.topics[1] ? decodeGameCodeFromTopic(event.topics[1]) : null;
+                break;
+              case '0xf52362634e34f5b1490607672dcb7219533f764a2974c04683172f19da9bf19d': // WinnersReported (FIXED)
+                // Game code is in topics[1], not data
+                gameCode = event.topics && event.topics[1] ? decodeGameCodeFromTopic(event.topics[1]) : null;
+                break;
+              case '0x3ee093fc8573d26f751985673e011ce7062f60ec12ac816784caa688d1b65fdc': // WinningsClaimed (FIXED)
+                // Game code is in topics[1], not data
+                gameCode = event.topics && event.topics[1] ? decodeGameCodeFromTopic(event.topics[1]) : null;
+                break;
+              default:
+                console.log(`🔍 Unknown event signature: ${eventSignature}, trying topic decoder`);
+                // Try decoding from topics first (indexed code), fallback to data
+                gameCode = event.topics && event.topics[1] ? decodeGameCodeFromTopic(event.topics[1]) : null;
+                if (!gameCode && event.data && event.data.length > 2) {
                   gameCode = decodeStringFromHex(event.data);
-                  break;
-              }
+                }
+                break;
             }
             
             if (gameCode && gameCode.length >= 3 && gameCode.length <= 10 && /^[A-Z0-9-]+$/i.test(gameCode)) {
