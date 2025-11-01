@@ -46,7 +46,7 @@ export const RELAY_API_URL = process.env.REACT_APP_RELAY_API_URL || "http://loca
 // Contract ABI - OpenPoolsV36 with ERC2771 support
 export const CONTRACT_ABI = [
   // Write functions
-  "function createGame(uint256 buyIn, address token, uint256 maxPlayers, address[] judges, uint256[] splits) returns (string)",
+  "function createGame(uint256 buyIn, address token, uint256 maxPlayers, address[] judges, uint256[] splits, uint256 initialPotAmount) returns (string)",
   "function joinGame(string code) payable",
   "function reportWinners(string code, address[] winners)",
   "function claimWinnings(string code)",
@@ -62,7 +62,7 @@ export const CONTRACT_ABI = [
   "function isTrustedForwarder(address forwarder) view returns (bool)",
 
   // Events
-  "event GameStarted(string indexed code, address indexed host, address token, uint256 buyIn, uint256 maxPlayers)",
+  "event GameStarted(string indexed codeIndexed, string code, address indexed host, address token, uint256 buyIn, uint256 maxPlayers)",
   "event PlayerJoined(string indexed code, address indexed player, uint256 playerCount)",
   "event GameLocked(string indexed code)",
   "event WinnersReported(string indexed code, address[] winners)",

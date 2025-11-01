@@ -62,13 +62,14 @@ export async function gaslessCreateGame(
     // Encode the createGame function call
     const tx = prepareContractCall({
       contract,
-      method: 'function createGame(uint256 buyIn, address token, uint256 maxPlayers, address[] judges, uint256[] splits) returns (string)',
+      method: 'function createGame(uint256 buyIn, address token, uint256 maxPlayers, address[] judges, uint256[] splits, uint256 initialPotAmount) returns (string)',
       params: [
         BigInt(buyInAmount),
         buyInToken,
         BigInt(maxPlayers),
         judgeList,
-        prizeSplits
+        prizeSplits,
+        0n  // initialPotAmount (0 for standard game creation)
       ]
     });
 
